@@ -1,0 +1,84 @@
+import numpy as np
+import cv2, pydicom
+import matplotlib.pyplot as plt
+from pydicom.pixel_data_handlers.util import apply_voi_lut
+ 
+window_center = -600
+window_width = 1600
+ 
+#DICOM 형식으로 저장된 XRAY사진 읽기 
+dicom_path = '.\\dicom_viewer_0015\\0015.dcm'
+slice = pydicom.read_file(dicom_path)
+
+# Rescale Slope, Window Center와 같은 DICOM 속성을 적용해주지 않으면 contrast 및 brightness 차이가 발생하게 되니 조심해야한다.
+s = 1 # int(slice.RescaleSlope) # 기울기 RescaleSlope는 대부분 1
+b = -1024 # int(slice.RescaleIntercept) # y 절편 간혹 -1024로 설정되어있는 경우가 있다 그러면 안좋음
+image = s * slice.pixel_array + b
+ 
+plt.subplot(1,3,1)
+plt.title('DICOM -> Array')
+plt.imshow(image, cmap = 'gray')
+ 
+# apply_voi_lut( ) 설정한 WC, WW에 맞춰 CT 영상에서 강조하는 과정
+# apply_voi_lut() 함수가 WC와 WW를 맞춰주는 역할을 한다.
+slice.WindowCenter = window_center
+slice.WindowWidth = window_width
+image2 = apply_voi_lut(image, slice)
+plt.subplot(1,3,2)
+plt.title('apply_voi_lut( )')
+plt.imshow(image2, cmap = 'gray')
+ 
+# normalization
+image3 = np.clip(image, window_center - (window_width / 2), window_center + (window_width / 2))
+plt.subplot(1,3,3)
+plt.title('normalize')
+plt.imshow(image3, cmap = 'gray')
+plt.show()      
+
+# nii.gz의 3D영상 파일을 처리하는 방법, 출처 : https://www.youtube.com/watch?v=Tc9ONZLBHP0&t=473s
+import numpy as np
+import nibabel as nib
+import matplotlib.pyplot as plt
+import seaborn as sns
+# 3D영상을 볼 수 있게 해주는 itkwidgets 라이브러리 import 공부 더 필요 
+import itkwidgets
+from ipywidgets import interact, interactive, IntSlider, ToggleButtons
+import matplotlib.pyplot as plt
+
+sns.set_style('darkgrid')
+
+image_path = '.\\Filtered_func_data.nii.gz'
+image_obj = nib.load(image_path)
+print(f'Type of the image {type(image_obj)}.')
+
+image_data = image_obj.get_fdata() # numpy로 바꿈
+print(type(image_data))
+print(image_data.shape) # 64 64 21 180 -> 64by64 그리고 21의 depth의 영상이 180개? 
+height, width, depth, channels = image_data.shape
+print(f'The image object has the follwing dimensions: \nheight={height}\nwidth={width}\ndepth={depth}\nchannels={channels}.')
+
+maxval = 20 # depth - 1개 
+i = np.random.randint(0, maxval)
+
+channel = 0
+
+print(f'Plotting layer Layer {i}, Channel {channel} of Image')
+
+# 해당 depth의 사진을 출력
+plt.imshow(image_data[:, :, i, channel], cmap='gray')
+plt.axis('off')
+plt.show()
+
+# 3D이미지를 연달아 영상처럼 볼 수 있게 되는 코드인데 현재 실행만되고 볼 수 있는 interface가 나오지 않는다. 
+def explore_3d_image(layer): # 3d image 출력 함수, layer = depth 
+    plt.figure(figsize=(10,15))
+    channel = 3
+    plt.imshow(image_data[:, :, layer, channel], cmap='gray')
+    plt.title('Explore layers of Brain MRI', family='Arial', fontsize=20)
+    plt.axis('off')
+    return layer
+
+interact(explore_3d_image, layer=(0, image_data.shape[2] - 1))
+
+
+
