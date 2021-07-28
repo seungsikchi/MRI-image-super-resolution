@@ -80,5 +80,32 @@ def explore_3d_image(layer): # 3d image 출력 함수, layer = depth
 
 interact(explore_3d_image, layer=(0, image_data.shape[2] - 1))
 
+path = '.\\dataset\\Canon\\CT_1\\1_MOD'
+
+reader = vtk.vtkDICOMImageReader()
+reader.SetDirectoryName(path)
+reader.SetDataSpacing(1, 1, 1)
+reader.Update()
+
+volumeMapper = vtk.vtkFixedPointVolumeRayCastMapper()
+volumeMapper.SetInputConnection(reader.GetOutputPort())
+volumeMapper.SetBlendModeToMaximumIntensity()
+
+volume = vtk.vtkVolume()
+volume.SetMapper(volumeMapper)
+ren = vtk.vtkRenderer()
+ren.AddVolume(volume)
+
+renWin = vtk.vtkRenderWindow()
+renWin.AddRenderer(ren)
+renWin.SetSize(900, 900)
+
+interactor = vtk.vtkRenderWindowInteractor()
+interactor.SetRenderWindow(renWin)
+
+interactor.Initialize()
+renWin.Render()
+interactor.Start()
+
 
 
