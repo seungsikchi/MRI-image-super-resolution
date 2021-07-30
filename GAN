@@ -1,0 +1,141 @@
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import pydicom
+import matplotlib.pyplot as plt
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras import layers, optimizers
+
+
+window_center = -600
+window_width = 1600
+ 
+#DICOM 형식으로 저장된 XRAY사진 읽기 
+dicom_path = '.\\dataset\\CT_1\\1_MOD\\10001.DCM'
+slice = pydicom.read_file(dicom_path)
+
+# Rescale Slope, Window Center와 같은 DICOM 속성을 적용해주지 않으면 contrast 및 brightness 차이가 발생하게 되니 조심해야한다.
+s = 1 # int(slice.RescaleSlope) # 기울기 RescaleSlope는 대부분 1
+b = -1024 # int(slice.RescaleIntercept) # y 절편 간혹 -1024로 설정되어있는 경우가 있다 그러면 안좋음
+image = s * slice.pixel_array + b
+image.reshape(1,512,512,1)
+
+def plot_multiple_images(images, n_cols=None):
+    n_cols = n_cols or len(images)
+    n_rows = (len(images) - 1) // n_cols + 1
+    if images.shape[-1] == 1:
+        images = np.squeeze(images, axis=-1)
+    plt.figure(figsize=(n_cols, n_rows))
+    for index, image in enumerate(images):
+        plt.subplot(n_rows, n_cols, index + 1)
+        plt.imshow(image, cmap="binary")
+        plt.axis("off")
+
+def build_generator_model():
+    model = tf.keras.Sequential() # Keras 모델 생성
+	
+    model.add(layers.Dense(1024, input_dim=100, use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    
+    model.add(layers.Dense(32*32*128, use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    
+    # Resahpe (32*32)
+    model.add(layers.Reshape((32, 32, 128)))  
+    model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization()) 
+    model.add(layers.LeakyReLU())
+
+    # (32*32) -> (64*64)
+    model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    # (64*64) -> (128*128)
+    model.add(layers.Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    # (128*128) -> (256*256)
+    model.add(layers.Conv2DTranspose(16, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+    
+    # (256*256) -> (512*512)
+    model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', activation='tanh'))
+    assert model.output_shape == (None, 512, 512, 1)
+	
+    return model
+
+generator = build_generator_model()
+generator.summary()
+
+noise = tf.random.normal([1,100])
+generated_image = generator(noise, training = False)
+
+plt.imshow(generated_image[0, :, :, 0], cmap = 'gray')
+plt.show()
+
+def build_discriminator_model():
+
+    model = tf.keras.Sequential()
+    
+    model.add(layers.Conv2D(64, (5, 5), strides=2, padding='same', input_shape=[512, 512, 1])) # input image size
+    model.add(layers.LeakyReLU(0.2))
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv2D(128, (5, 5), strides=2, padding='same'))
+    model.add(layers.LeakyReLU(0.2))
+    
+    model.add(layers.Flatten())
+    
+    model.add(layers.Dense(256))
+    model.add(layers.LeakyReLU(0.2))
+    model.add(layers.Dropout(0.3))
+    
+    model.add(layers.Dense(512))
+    model.add(layers.LeakyReLU(0.2))
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Dense(1))
+    
+    return model
+
+discriminator = build_discriminator_model()
+discriminator.summary()
+
+gan = keras.models.Sequential([generator, discriminator])
+
+gan.compile(loss = "binary_crossentropy", optimizer = "rmsprop")
+
+
+batch_size = 1
+EPOCHS = 20
+noise_dim = 100
+codings_size = 100
+
+def train_gan(gan, image, batch_size, codings_size, n_epochs=50):
+    generator, discriminator = gan.layers
+    for epoch in range(n_epochs):
+        print("Epoch {}/{}".format(epoch + 1, n_epochs))              # not shown in the book
+        for X_batch in image:
+            # phase 1 - training the discriminator
+            noise = tf.random.normal(shape=[batch_size, codings_size])
+            generated_images = generator(noise)
+            X_fake_and_real = tf.concat([generated_images, X_batch], axis=0)
+            y1 = tf.constant([[0.]] * batch_size + [[1.]] * batch_size)
+            discriminator.trainable = True
+            discriminator.train_on_batch(X_fake_and_real, y1)
+            # phase 2 - training the generator
+            noise = tf.random.normal(shape=[batch_size, codings_size])
+            y2 = tf.constant([[1.]] * batch_size)
+            discriminator.trainable = False
+            gan.train_on_batch(noise, y2)
+        plot_multiple_images(generated_images, 8)                     # not shown
+        plt.show()    
+
+train_gan(gan, image, batch_size, codings_size)
+
