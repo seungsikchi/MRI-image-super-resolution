@@ -1,0 +1,161 @@
+import tensorflow as tf
+import glob
+import imageio
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import PIL
+from tensorflow.keras import layers
+import time
+from IPython import display
+
+(train_images, train_labels), (_, _) = tf.keras.datasets.mnist.load_data() #학습데이터를 불러옴
+
+train_images = train_images.reshape(train_images.shape[0], 28, 28, 1).astype('float32') #이미지의 사이즈와 형식을 실수형으로 변경합니다.
+train_images = (train_images - 127.5) / 127.5 #이미지를 정규화 합니다.
+
+BUFFER_SIZE = 60000
+BATCH_SIZE = 256 #Batch size를 256으로 설정
+
+#데이터 배치를 만들고 섞는다. = Data shuffling
+train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+#생성자
+노이즈를 생성하고 판펼자가 판별해주는값을 수정해서 점점 사용자가 원하는 그림에 가까워지는 그림을 만들어냄
+
+def make_generator_model():
+  model = tf.keras.Sequential()
+  model.add(layers.Dense(7*7*256, use_bias = False, input_shape = (100,))) #노이즈를 생성합니다. 7x7사이즈의 노이즈를 만듬 #1차원의 노이즈를 100개 만듬 
+  model.add(layers.BatchNormalization())#BatchNormalization #Residual레이어 에서도 사용함
+  model.add(layers.LeakyReLU())#LeakyReLU를 사용함 음수의 경우 완만한 선형함수를 그림
+
+  model.add(layers.Reshape((7, 7, 256)))#노이즈를 받아냄 1차원의 배열을 2차원 이미지로 바꿔줌
+  assert model.output_shape == (None, 7, 7, 256) #주목 : 배치사이즈로 None이 주어집니다. #CNN을 거치고 나온 이미지가 7 x7 x 256인지 확인
+
+  model.add(layers.Conv2DTranspose(128, (5,5), strides = (1, 1), padding = 'same', use_bias = False))#앞에서 나온 값을 CNN에 넣음
+  assert model.output_shape == (None, 7, 7, 128)#CNN을 거치고 나온 이미지가 7 x7 x 128인지 확인
+  model.add(layers.BatchNormalization())#참인 경우 BatchNormalization을 실행함
+  model.add(layers.LeakyReLU())#LeakyReLU를 사용
+
+  model.add(layers.Conv2DTranspose(64, (5, 5), strides = (2, 2), padding = 'same', use_bias = False))#앞에서 나온 값을 CNN에 넣음
+  assert model.output_shape == (None, 14, 14, 64)#CNN을 거치고 나온 이미지가 14 x14 x 64인지 확인
+  model.add(layers.BatchNormalization())#참인 경우 BatchNormalization을 실행함
+  model.add(layers.LeakyReLU())#LeakyReLU를 사용
+
+  model.add(layers.Conv2DTranspose(1, (5, 5), strides = (2, 2), padding = 'same', use_bias = False, activation = 'tanh'))#앞에서 나온 값을 CNN에 넣음 Function tanh
+  assert model.output_shape == (None, 28, 28, 1)#CNN을 거치고 나온 노이즈가 28x28x1인지 확인
+
+  return model
+  
+generator = make_generator_model() #generator로 생성자 변수를 사용한다고 설정
+noise = tf.random.normal([1, 100])#랜덤한 숫자로 이루어진 길이가 100인 리스트 생성
+generated_image = generator(noise, training = False)#노이즈 이미지를 생성 #위에서 생성한 램덤 시드를 넣음
+
+plt.imshow(generated_image[0, :, :, 0], cmap = 'gray')#노이즈 이미지를 눈으로 확인하기 위해서 matplotlib.pyplot을 사용해 출력
+
+#판별자
+생성자가 만드는 그림이 정답 이미지와 맞는지 않은지 판단함
+def make_discriminator_model():
+  model = tf.keras.Sequential()
+  model.add(layers.Conv2D(64, (5, 5), strides = (2, 2), padding = 'same', input_shape = [28, 28, 1]))#input_image = 사이즈 28사진 커널사이즈 (5, 5) padding사용
+  
+  model.add(layers.LeakyReLU())#LeakyReLU사용
+  model.add(layers.Dropout(0.3))#드롭아웃을 사용함 비율 0.3(30%)
+  
+  model.add(layers.Conv2D(128, (5, 5), strides = (2, 2), padding='same'))#CNN사용 노트개수 128 커널사이즈 (5,5)
+  model.add(layers.LeakyReLU())#LeakyReLU사용
+  model.add(layers.Dropout(0.3))#드롭아웃을 사용함 비율 0.3(30%)
+
+  model.add(layers.Flatten())#1차원 배열로 바꿈
+  model.add(layers.Dense(1))#Dense레이어에 넣음
+
+  return model
+  
+discriminator = make_discriminator_model()#discriminator 판별자 변수를 사용한다고 설정
+decision = discriminator(generated_image)#위에서 생성된 노이즈 이미지를 판별자에 넣어서 돌아가는지 확인
+print(decision)#확인해본 결과를 출력
+
+cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits = True)#cross_entropy를 크로스 엔트로피 손실함수로 지정
+
+def discriminator_loss(real_output, fake_output):#판별자의 손실함수를 설정
+  real_loss = cross_entropy(tf.ones_like(real_output), real_output)#정답의 손실함수
+  fake_loss = cross_entropy(tf.zeros_like(fake_output), fake_output)#가짜의 손실함수
+  total_loss = real_loss + fake_loss #정답과 가짜의 손실함를 합침
+  return total_loss  #합친 손실함수값을 출력
+
+def generator_loss(fake_output):
+  return cross_entropy(tf.ones_like(fake_output), fake_output)#위에서 만든 가짜 손실함수의 값을 출력
+  
+generator_optimizer = tf.keras.optimizers.Adam(1e-4)#생성자 활섬화 함수 adam으로 설정
+discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)#판별자 활성화 함수 adam으로 설정
+
+#CheckPoint설정 학습에 실패했을때를 대비해서 틈틈히 저장함
+checkpoint_dir = './training_checkpoints'
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
+                                 discriminator_optimizer=discriminator_optimizer,
+                                 generator=generator
+                                 discriminator=discriminator)
+                                 
+EPOCHS = 50 #학습량 50으로 설정
+noise_dim = 100 #노이즈의 개수를 설정
+num_examples_to_generate = 10 #학습하면서 어떻게 진행하는지 확인할 개수
+
+seed = tf.random.normal([num_examples_to_generate, noise_dim])#seed값을 설정
+
+@tf.function
+def train_step(images):
+    noise = tf.random.normal([BATCH_SIZE, noise_dim])
+
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape: #gradientTape에 학습이 어떻게 되는지 저장
+      generated_images = generator(noise, training=True)#생성자로 노이즈 이미지 생성
+
+      real_output = discriminator(images, training=True)#정답 이미지를 판별자에 넣고 나온값을 real_output에 넣음
+      fake_output = discriminator(generated_images, training=True)#생성자로 만들어진 이미지를 판별자에 넣고 나온값을 fake에 넣음
+
+      gen_loss = generator_loss(fake_output)#생성자의 오차값을 측정해서 생성자 오차값에 넣음
+      disc_loss = discriminator_loss(real_output, fake_output)#판별자의 오차값을 측정해서 판별자 오차값에 넣음
+
+    gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)#생성자의 경사하강법 경사를 기록함
+    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)#판별자의 경사하강법 경사를 기록함
+
+    generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
+    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
+    
+def train(dataset, epochs):
+  for epoch in range(epochs): #epoch값만큼 반복함
+    start = time.time()
+
+    for image_batch in dataset:
+      train_step(image_batch)#학습이 일어나는 함수
+
+    # GIF를 위한 이미지를 바로 생성합니다.
+    display.clear_output(wait=True) # 학습중간에 결과가 어떻게 진행되는지 알려줌
+    generate_and_save_images(generator, epoch + 1, seed)
+
+    # 15 에포크가 지날 때마다 모델을 저장합니다.
+    if (epoch + 1) % 15 == 0:
+      checkpoint.save(file_prefix = checkpoint_prefix)#checkpoint에 Epoch이 15돌때마다 저장함
+
+    # print (' 에포크 {} 에서 걸린 시간은 {} 초 입니다'.format(epoch +1, time.time()-start))
+    print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
+
+# 마지막 에포크가 끝난 후 생성합니다.
+display.clear_output(wait=True) #학습이 끝나고 결과로 이미지를 보여줌
+generate_and_save_images(generator, epochs, seed)
+  
+def generate_and_save_images(model, epoch, test_input):# `training`이 False로 맞춰진 것을 주목하세요. # 이렇게 하면 (배치정규화를 포함하여) 모든 층들이 추론 모드로 실행됩니다. 
+  predictions = model(test_input, training=False) #학습하고 나온걸 prediction 해서 결과를 출력함
+
+  fig = plt.figure(figsize=(4,4)) #4x4로 총 16장을 출력하도록 만듬
+
+  for i in range(predictions.shape[0]): #학습한 이미지 출력
+      plt.subplot(4, 4, i+1)
+      plt.imshow(predictions[i, :, :, 0] * 127.5 + 127.5, cmap='gray')
+      plt.axis('off')
+
+  plt.savefig('image_at_epoch_{:04d}.png'.format(epoch))
+  plt.show()
+  
+%%time
+train(train_dataset, EPOCHS)# 학습시키는 명령어
