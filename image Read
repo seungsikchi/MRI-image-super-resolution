@@ -1,0 +1,84 @@
+from glob import glob
+import numpy as np
+import os
+import pydicom
+from sklearn.utils import shuffle
+
+class dataSet():
+    
+    #초기함수
+    def __init__(self, path):
+        self.path = path
+        self.x = []
+
+        #in splitData
+        self.train_x = []
+        self.test_x = []
+
+    def imageread(self, path):
+        slice = pydicom.read_file(path)
+        s = 1 
+        b = -1024 
+        x = s * slice.pixel_array + b
+        return x
+
+    def getFilesInFolder(self, path):
+        result = [ y for x in os.walk(path) for y in glob(os.path.join(x[0], '*.*%s'%"dcm"))]
+        
+
+        for localPath in result:
+            img = self.imageread(localPath)
+            self.x.append(img) 
+        return self.x
+    
+    # def resizeAll(self, X, dim):
+        
+    #     resizedX = []
+
+    #     N = len(X)
+
+    #     for i in range(N):
+    #         resized = X[i].resize((dim, dim))
+    #         npImg = np.array(resized)
+
+    #         if len(npImg.shape) == 3:
+    #             resizedX.append(npImg)
+    #        # print(npImg.shape)
+        
+    #     self.x = np.array(resizedX)
+
+    def split_Dataset(self, ratio):
+        split_x = []
+
+        split_x = np.array(self.x)
+        print(split_x)
+        train_idx = int(len(split_x) * ratio)
+
+        self.train_x = split_x[:train_idx, :, :]
+
+        self.test_x = split_x[train_idx:, :, :]
+
+        return self.train_x, self.test_x
+
+    def shuffleData(self, x, ):
+        x = np.array(x)
+        x = shuffle(x)
+        return x
+
+    def normalization(self,x , window_center = -600, window_width = 1600):
+        x = np.clip(x, window_center - (window_width / 2), window_center + (window_width / 2))
+        return x
+    
+    def load_data(self,ratio):
+        self.getFilesInFolder(self.path) #전체 데이터 가져옴
+        # self.resizeAll(self.x, dim) # numpy화 되어 있음
+        self.x = self.shuffleData(self.x)
+        self.split_Dataset(ratio)
+        self.train_x = self.normalization(self.train_x)
+        
+        return self.train_x
+
+
+path = '.\\dataset\\Canon\\CT_1\\'
+ds = dataSet(path)
+train_x = ds.load_data(0.3)
