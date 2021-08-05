@@ -33,33 +33,25 @@ def build_generator_model():
     model.add(layers.Dense(32*32*128, use_bias=False))
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU())
-    
+
     # Resahpe (32*32)
     model.add(layers.Reshape((32, 32, 128)))  
-    model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
+    model.add(layers.Conv2DTranspose(128, (2, 2), strides=(1, 1), padding='same', use_bias=False))
     model.add(layers.BatchNormalization()) 
+    model.add(layers.UpSampling2D(size = (2, 2)))
     model.add(layers.LeakyReLU())
 
     # (32*32) -> (64*64)
-    model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same', use_bias=False))
     model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
-
-    # (64*64) -> (128*128)
-    model.add(layers.Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same', use_bias=False))
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
-
-    # (128*128) -> (256*256)
-    model.add(layers.Conv2DTranspose(16, (5, 5), strides=(2, 2), padding='same', use_bias=False))
-    model.add(layers.BatchNormalization())
+    model.add(layers.UpSampling2D(size = (2, 2)))
     model.add(layers.LeakyReLU())
     
     # (256*256) -> (512*512)
     model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', activation='tanh'))
     assert model.output_shape == (None, 512, 512, 1)
-	
     return model
+
 
 generator = build_generator_model()
 generator.summary()
@@ -74,13 +66,22 @@ def build_discriminator_model():
 
     model = tf.keras.Sequential()
     
-    model.add(layers.Conv2D(64, (5, 5), strides=2, padding='same', input_shape=[512, 512, 1])) # input image size
+    model.add(layers.Conv2D(12, (3, 3), strides=2, padding='same', input_shape=[512, 512, 1])) # input image size
     model.add(layers.LeakyReLU(0.2))
     model.add(layers.Dropout(0.3))
 
-    model.add(layers.Conv2D(128, (5, 5), strides=2, padding='same'))
+    model.add(layers.Conv2D(32, (3, 3), strides=2, padding='same'))
     model.add(layers.LeakyReLU(0.2))
-    
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv2D(64, (3, 3), strides=2, padding='same'))
+    model.add(layers.LeakyReLU(0.2))
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv2D(128, (3, 3), strides=2, padding='same'))
+    model.add(layers.LeakyReLU(0.2))
+    model.add(layers.Dropout(0.3))
+
     model.add(layers.Flatten())
     
     model.add(layers.Dense(256))
@@ -132,12 +133,14 @@ def train_step(images):
 
       gen_loss = generator_loss(fake_output)#생성자의 오차값을 측정해서 생성자 오차값에 넣음
       disc_loss = discriminator_loss(real_output, fake_output)#판별자의 오차값을 측정해서 판별자 오차값에 넣음
-
+      d_loss = 0.5*np.add(gen_loss, disc_loss)
     gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)#생성자의 경사하강법 경사를 기록함
     gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)#판별자의 경사하강법 경사를 기록함
 
     generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
     discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
+    print("gen_loss: %f"%d_loss[0])
+    print("disc_loss: %d"%disc_loss)
 
 test_noise = tf.random.normal([100, noise_dim]) #학습 시각화를 위한 테스트 노이즈
 
@@ -163,7 +166,7 @@ def train(image, epochs):
         for image_batch in image: #batch 학습(64)
             train_step(image_batch)
 
-        print("%s epochs trained" % epochs)
+        print("%s epochs trained" %epochs)
 
         if epochs % 5 == 0:
             show_generated_images(epochs)
