@@ -1,0 +1,351 @@
+import sys
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QWidget, QHBoxLayout,QVBoxLayout, QAction, QFileDialog, QGraphicsView, QGraphicsScene)
+from PyQt5.QtGui import QPixmap, QIcon, QImage
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import *
+import pydicom
+
+import numpy as np
+import SimpleITK as itk 
+import qimage2ndarray
+import math
+
+class MyWidget(QWidget): #viewer쪽 초기화 함수
+    def __init__(self): 
+        super().__init__() 
+
+        self.lbl_original_img = QGraphicsScene() #원본이미지
+        self.lbl_blending_img = QGraphicsScene() #라벨링을 씌울 이미지
+        self.view_1 = QGraphicsView(self.lbl_original_img) #원본이미지를 띄울 공간 
+        self.view_2 = QGraphicsView(self.lbl_blending_img) #변형된 이미지를 띄울 공간
+        self.view_1.setFixedSize(514, 514) #원본이미지 공간 설정
+        self.view_2.setFixedSize(514, 514) 
+
+        self.lbl_pos = QLabel() #텍스트를 나타내기 위함 = 나중에 마우스 위치를 출력
+        self.lbl_pos.setAlignment(Qt.AlignCenter) #입력하는 글자를 중간에 위치하도록 함
+        
+        self.hbox = QHBoxLayout()#수평으로 위젯을 설정
+
+        self.hbox.addWidget(self.view_1) #이미지 띄울공간 생성
+        self.hbox.addWidget(self.view_2) 
+        
+        self.vbox = QVBoxLayout() #수직으로 위젯을 설정
+        self.vbox.addLayout(self.hbox) #밑에 버튼과 글씨를 출력하는 수직으로 설정함
+        self.vbox.addWidget(self.lbl_pos) #글자가 나오는 공간
+        
+        self.setLayout(self.vbox) #위젯을 나타냄
+
+
+class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
+
+    def __init__(self):
+        super().__init__()
+        
+        
+        self.LRpoint = [0, 0] #마우스 위치를 저장함
+        self.LRClicked = False #마우스 클릭을 확인함
+        self.window_level = 40 #이미지 좌우 크기?
+        self.window_width = 400 #이미지 높이 크기?
+        self.deltaWL = 0 
+        self.deltaWW = 0
+
+        self.Nx = 0 #좌우 크기 저장 (y크기로 저장이 되어있는데 x로 되어있음)
+        self.Ny = 0 #높이 크기 저장
+        self.NofI = 0  #이미지의 개수가 들어가는 변수 
+
+        self.cur_idx = 0 #Pixmap에 올라갈 이미지
+        self.cur_image = [] #
+        self.EntireImage = [] #Pixmap 올라갈 이미지들을 가지고 있는 폴더
+        self.adjustedImage = []
+
+
+
+        self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
+        self.setCentralWidget(self.wg)  #가운데로 설정함
+        self.initUI()
+
+
+        
+        
+    def initUI(self): #기초 UI = butten이나 단축키
+        
+        openAction = QAction(QIcon('exit.png'), 'Open', self) #이미지를 불러오는 버튼 #파일이 있는 폴더를 열음
+        openAction.triggered.connect(self.openImage) #눌리면 이미지를 불러오는 함수로 넘아감
+        self.toolbar = self.addToolBar('Open') #툴바 open을 만듬
+        self.toolbar.addAction(openAction) #open을 누르면 openAction 함수를 실행
+
+        Dbtn = QPushButton('&ImgNum', self) #ImgNum 버튼을 만듬
+        Dbtn.move(900, 565) #버튼위치를 설정
+        Dbtn.setCheckable(True) # 버튼을 누른상태와 그렇지 않은 상태를 구분함 
+        Dbtn.toggle() #상태를 바꿈
+        Dbtn.clicked.connect(self.showDialog) #버튼을 클릭할 경우 showDialog 함수를 실행함
+  
+        btn1 = QPushButton('&previous', self) #previous 버튼을 만듬
+        btn1.move(700, 565) #버튼위치를 설정
+        btn1.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
+        btn1.toggle()
+        
+        btn2 = QPushButton('&next', self) #next 버튼을 만듬
+        btn2.move(800, 565) #버튼위치를 설정
+        btn1.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
+        btn1.toggle()
+
+        btn1.setShortcut('Ctrl+1') #단축키 Ctrl과 1을 누를경우 previous를 실행
+        btn2.setShortcut('Ctrl+2') #단축키 Ctrl과 2을 누를경우 next를 실행
+        btn1.clicked.connect(self.btn1_clicked) #버튼을 클릭할 경우 btn1_clicked를 실행
+        btn2.clicked.connect(self.btn2_clicked) #버튼을 클릭할 경우 btn2_clicked를 실행
+        
+        self.setWindowTitle('Test Image') #라벨링 툴 프로그램 이름 설정
+
+        self.setGeometry(300, 300, 1100, 600) #띄울 위치 2개 크기 2개
+
+        self.show() #라벨링 툴을 보여줌
+
+
+    def showDialog(self): #이미지에 숫자를 지정함
+        num, ok = QInputDialog.getInt(self, 'Input ImageNumber', 'Enter Num') #숫자를 입력받을 창을 띄움
+        self.cur_idx = num - 1 #숫자를 입력 받은 뒤 그 숫자에서 -1해서 저장 why? 숫자를 입력받아서 리스트에 저장을 하면 그안에 있는 배열이 하나씩 당겨지기 때문
+        
+        print("show image",self.cur_idx + 1) #show image를 출력하고 입력 받은 숫자를 출력
+        if self.cur_idx > self.NofI-1:  
+            self.cur_idx = self.NofI-1 #입력 받은 숫자가 양수일 경우 앞에서부터 이미지를 불러옴
+        elif self.cur_idx < 0:
+            self.cur_idx = self.NofI-224 #음수로 할경우 뒤에서 부터 이미지를 불러옴
+        
+
+        
+        self.cur_image = self.EntireImage[self.cur_idx]#불러온 여러장의 데이터중 입력받은 숫자의 이미지를 cur_image로 설정
+        
+        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #이미지를 받아서 window의 높이와 너비를 바꿔서 image로 설정
+        
+        image = qimage2ndarray.array2qimage(image)  #Q이미지를 numpy array로 바꿈
+        image = QPixmap.fromImage(QImage(image))  #numpy array를 pixmap으로 변환
+        self.wg.lbl_original_img.addPixmap(image)  #원본이미지의 Q이미지를 pix맵으로 설정
+        self.wg.lbl_blending_img.addPixmap(image)  #라벨링 되어있는 이미지의 Q이미지를 pix맵으로 설정
+        self.wg.view_1.setScene(self.wg.lbl_original_img) #원본 이미지를 보도록 설정
+        self.wg.view_2.setScene(self.wg.lbl_blending_img) #라벨링 할 이미지를 보도록 설정
+        self.wg.view_1.show()#원본이미지를 띄움
+        self.wg.view_2.show()#라벨링 이미지를 띄움
+
+    def onChanged(self,text):
+        self.lbl.setText(text)#마우스 위치를 알려주는 글을 입력
+        self.lbl.adjustSize()#위에서 설정한 text를 출력
+
+
+
+    def btn1_clicked(self): #btn1을 클릭할때 실행할 함수 = previous
+        
+        self.cur_idx = self.cur_idx - 1 #위에서 입력받은 숫자를 cur index로 설정
+                
+        if self.cur_idx < 0: #입력받은 숫자가 0보다 작을경우 0으로 설정 
+            self.cur_idx = 0
+            
+        print("left and image", self.cur_idx +1) #left and image를 출력하면서 index에 1을 더함
+
+
+        self.cur_image = self.EntireImage[self.cur_idx] #self.cur_idx에 있는 이미지를 cur_image에 저장
+
+        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #image의 크기를 위에서 설정한 값으로 지정
+        
+        image = qimage2ndarray.array2qimage(image) #Numpy를 Q이미지로 변경
+        image = QPixmap.fromImage(QImage(image)) #위에서 변경한 Q이미지를 다시 Q Pixmap으로 설정
+
+        
+        self.wg.lbl_original_img.addPixmap(image) #원본이미지를 보기위한 위젯을 제공
+        self.wg.lbl_blending_img.addPixmap(image) #마스킹 이미지를 보기위한 위젯을 제공
+        self.wg.view_1.setScene(self.wg.lbl_original_img) #원본 이미지를 보도록 설정
+        self.wg.view_2.setScene(self.wg.lbl_original_img) #마스킹 이미지를 보도록 설정
+        self.wg.view_1.show() #원본이미지를 출력함
+        self.wg.view_2.show() #마스킹 출력함
+
+
+    def btn2_clicked(self): #btn2를 클릭할때 실행할 함수 = next
+
+
+        self.cur_idx = self.cur_idx + 1 #이미지를 넘기기 위해서 숫자를 1 추가함
+
+        if self.cur_idx > self.NofI-1: #입력받은 이미지 숫자가 
+            self.cur_idx = self.NofI-1 
+
+        print("right and image=", self.cur_idx +1)
+
+
+        self.cur_image = self.EntireImage[self.cur_idx] #self.cur_idx에 있는 이미지를 cur_image에 저장
+
+        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #image의 크기를 위에서 설정한 값으로 지정
+        
+        image = qimage2ndarray.array2qimage(image) #Numpy를 Q이미지로 변경
+        image = QPixmap.fromImage(QImage(image)) #위에서 변경한 Q이미지를 다시 Q Pixmap으로 설정
+
+        #왼쪽 프레임 이미지 업데이트 필요
+        self.wg.lbl_original_img.addPixmap(image) #원본이미지를 보기위한 위젯을 제공
+        self.wg.lbl_blending_img.addPixmap(image) #마스킹 이미지를 보기위한 위젯을 제공
+        self.wg.view_1.setScene(self.wg.lbl_original_img) #원본 이미지를 보도록 설정
+        self.wg.view_2.setScene(self.wg.lbl_original_img) #마스킹 이미지를 보도록 설정
+        self.wg.view_1.show() #원본이미지를 출력함
+        self.wg.view_2.show() #마스킹 출력함
+
+
+
+    def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
+        Lower = level - (width/2.0) #이미지의 중간점에서 그 아래 부분을 Lower로 설정
+        Upper = level + (width/2.0) #이미지의 중간점에서 그 위 부분을 Upper로 설정
+    
+        range_ratio = (Upper - Lower) / 256.0 
+
+        img_adjusted = (image - Lower)/range_ratio
+        image = img_adjusted.clip(0, 255)
+
+        return image
+
+
+    
+    def openImage(self):
+        imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', './') #이미지의 주소를 인식함
+
+        print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
+
+        folder_path = ".\\" 
+
+
+        reader = itk.ImageSeriesReader() #reader 이름의 객체
+        
+        dicom_names = reader.GetGDCMSeriesFileNames(folder_path) #폴더안에 있는 Dicom파일의 이름을 다 불러옴
+        
+        print(type(dicom_names)) #dicom파일의 형식을 출력
+        reader.SetFileNames(dicom_names) #reder에 위에서 인식한 dicom파일의 이름을 지정함
+
+
+        images = reader.Execute() #파일을 읽고 image에 실행?
+        
+        print(type(images[0]), type(images[1])) #불러온 이미지의 형식을 출력 
+
+        ImgArray = itk.GetArrayFromImage(images) #ITK이미지를 Numpy array로 변경함   
+        self.EntireImage = np.asarray(ImgArray, dtype=np.float32) #변환한 숫자의 형식을 실수형으로 설정하고 EstireImage리스트에 저장함
+        self.EntireImage = np.squeeze(self.EntireImage) #길이가 1인 차원을 제거함
+        
+        self.NofI = self.EntireImage.shape[0] #이미지의 개수로 지정
+        self.Nx = self.EntireImage.shape[1] #이미지의 x길이로 지정
+        self.Ny = self.EntireImage.shape[2] #이미지의 y길이로 지정
+
+        self.cur_image = self.EntireImage[self.cur_idx]  #위에서 불러왔던 이미지들중에 입력받는 이미지의 이미지를 부름 #첫번째 이미지를 띄움
+         
+        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #level 40 = 지방 width = 얼마나의 크기를 나타낼것인가
+        #image에는 원하는 이미지가 들어감
+        image = qimage2ndarray.array2qimage(image) #numpy로 되어있는 이미지를 Q이미지로 변환
+        image = QPixmap.fromImage(QImage(image)) #Q이미지를 Pixmap으로 만듬
+        
+        
+        self.wg.lbl_original_img.addPixmap(image) #원본이미지를 보기위한 위젯을 만듭니다
+        self.wg.view_1.setScene(self.wg.lbl_original_img) #원본이미지를 띄우기위해 지정
+        self.wg.view_1.show() #원본이미지를 띄웁니다.
+
+        self.wg.lbl_blending_img.addPixmap(image) #원본이미지를 보기위한 위젯을 만듭니다 #나중에 블랭딩된 이미지로 바꿔야함
+        self.wg.view_2.setScene(self.wg.lbl_blending_img) #원본이미지를 띄우기위해 지정
+        self.wg.view_2.show() #원본이미지를 띄웁니다.
+
+        self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent #MouseMoveEvent함수를 view_1의 MouseMoveEvent로 설정함
+        self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent #MouseMoveEvent함수를 view_2의 MouseMoveEvent로 설정함
+        self.wg.view_1.setMouseTracking(True) #view_1의 마우스의 이동을 항상 감지합니다.
+        self.wg.view_2.setMouseTracking(True) #view_2의 마우스의 이동을 항상 감지합니다.
+
+
+    def mouseMoveEvent(self, event): #마우스가 위치를 감지하는 함수
+        txt = "마우스가 위치한 이미지의 좌표 ; x={0},y={1}".format(event.x(), event.y()) #마우스 위치한 좌표 출력 내용 저장
+        self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
+        self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
+
+        
+        if self.LRClicked: #만약 마우스를 클릭한다면 실행
+            
+            mX = float(event.globalX())#지금 마우스 좌표 x값
+            mY = float(event.globalY())#지금 마우스 좌표 y값
+            
+           
+            rX = np.array(self.LRpoint[0]) #클릭을 했을때의 마우스 위치 x값을 추가
+            rY = np.array(self.LRpoint[1]) #클릭을 했을떄의 마우스 위치 y값을 추가
+
+
+            
+            square = (rX - mX)*(rX - mX) + (rY - mY)*(rY - mY) #두점 사이의 거리를 구하는 공식 = 클릭했던 지점과 지금 있는 지점의 거리를 구함
+            dist = math.sqrt(square) #거리를 구함
+
+            temp_wl = 0 #보이는 중점
+            temp_ww = 0 #보이는 넒이
+
+           
+            if rX < mX: 
+                self.deltaWL  = dist #중점을 클릭하면서 오른쪽으로 가면 더함
+                
+            else: 
+                self.deltaWL  = -dist #중점을 클릭하면서 왼쪽으로 가면 뺌
+
+            
+            if rY < mY: 
+                self.deltaWW = -dist #중점을 클릭하면서 밑으로 가면 더함
+
+            else:
+                self.deltaWW = dist #중점을 클릭하면서 위로 가면 뺌
+
+            
+            temp_wl = self.window_level + self.deltaWL #이동한 거리만큼 나타내는 기준을 숫자를 바꿈
+            temp_ww = self.window_width + self.deltaWW #이동한 거리만큼 나타내는 기준 범위를 바꿈
+            #클릭을 하고 한번더 클릭을 했을때 바뀜
+            #이동한 거리가 음수라면 여기서는 0으로 설정함
+            if temp_wl < 0: 
+                temp_wl = 0
+            
+            if temp_ww < 0: 
+                temp_ww = 0
+
+            print("move: ", temp_wl, temp_ww)
+
+    def mousePressEvent(self, event):
+        
+        if event.buttons () == QtCore.Qt.LeftButton | QtCore.Qt.RightButton: #왼쪽 마우스와 오른쪽 마우스를 클릭했을때
+            
+            if self.LRClicked == False: #한번 더 클릭을해서 하면 바뀜
+                self.LRClicked = True #확인을 위해서 지속적으로 트루로 바꿈
+        
+            else:#클릭을 하면 실행
+                self.LRClicked = False #클릭을 탐지하기 위해서 다시 False로 바꿈
+                
+                
+                self.window_level = self.window_level + self.deltaWL #다시 클릭을 해서 받은 값으로 변경을 함
+                self.window_width = self.window_width + self.deltaWW #다시 클릭을 해서 받은 값으로 변경을 함
+                
+                
+                if self.window_level < 0: #다시 클릭을 했을때 음수로 되면 0으로 표현
+                    self.window_level = 0
+                if self.window_width < 0: #다시 클릭을 했을때 음수로 되면 0으로 표현
+                    self.window_width = 0
+
+                print("최종반영 ", self.window_level, self.window_width)#위치를 이동함
+
+                
+                image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #수정된 픽셀 값으로 이미지를 바꿈 
+        
+                image = qimage2ndarray.array2qimage(image) #numpy로 되어있는 이미지를 Q이미지로 바꿈
+                image = QPixmap.fromImage(QImage(image)) #Q이미지를 QPixmap으로 바꿈
+
+                self.wg.lbl_original_img.addPixmap(image) #객체를 추가함? 라벨을 추가함?
+                self.wg.lbl_blending_img.addPixmap(image)
+                self.wg.view_1.setScene(self.wg.lbl_original_img) #원본이미지를 띄우려고 지정
+                self.wg.view_2.setScene(self.wg.lbl_blending_img) #라벨링한 이미지를 띄우려고 지정
+                self.wg.view_1.show() #원본이미지를 띄움
+                self.wg.view_2.show() #라벨링한 이미지를 띄움
+
+            print("mousePressEvent") #mousePressEvent를 출력합니다.
+            print("Mouse 클릭한 글로벌 좌표: x={0},y={1}".format(event.globalX(), event.globalY())) #클릭했을때의 좌표를 출력합니다.
+            
+            x = event.globalX() #클릭했을떄의 x좌표를 x로 지정합니다.
+            y = event.globalY() #클릭했을떄의 y좌표를 y로 지정합니다.
+
+            self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = MyApp()
+    sys.exit(app.exec_())
