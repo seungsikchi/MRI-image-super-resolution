@@ -1,8 +1,8 @@
 import sys
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QLabel, QMainWindow, QWidget, QHBoxLayout,QVBoxLayout, QAction, QFileDialog, QGraphicsView, QGraphicsScene)
-from PyQt5.QtGui import QPixmap, QIcon, QImage
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
 import pydicom
 
@@ -25,6 +25,11 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
         self.lbl_pos = QLabel() #텍스트를 나타내기 위함 = 나중에 마우스 위치를 출력
         self.lbl_pos.setAlignment(Qt.AlignCenter) #입력하는 글자를 중간에 위치하도록 함
         
+        self.drawing = False
+        self.brush_size = 5
+        self.brush_color = Qt.black
+        self.last_point = QPoint()
+
         self.hbox = QHBoxLayout()#수평으로 위젯을 설정
 
         self.hbox.addWidget(self.view_1) #이미지 띄울공간 생성
@@ -41,7 +46,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
     def __init__(self):
         super().__init__()
-        
         
         self.LRpoint = [0, 0] #마우스 위치를 저장함
         self.LRClicked = False #마우스 클릭을 확인함
@@ -62,6 +66,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
+        self.image = qimage2ndarray.array2qimage(self.wg.view_2 )
         self.setCentralWidget(self.wg)  #가운데로 설정함
         self.initUI()
 
@@ -69,7 +74,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         
         
     def initUI(self): #기초 UI = butten이나 단축키
-        
         openAction = QAction(QIcon('exit.png'), 'Open', self) #이미지를 불러오는 버튼 #파일이 있는 폴더를 열음
         openAction.triggered.connect(self.openImage) #눌리면 이미지를 불러오는 함수로 넘아감
         self.toolbar = self.addToolBar('Open') #툴바 open을 만듬
@@ -146,7 +150,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.cur_image = self.EntireImage[self.cur_idx] #self.cur_idx에 있는 이미지를 cur_image에 저장
 
-        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #image의 크기를 위에서 설정한 값으로 지정
+        image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width) #자기가 보고싶은 픽셀범위로 설정
         
         image = qimage2ndarray.array2qimage(image) #Numpy를 Q이미지로 변경
         image = QPixmap.fromImage(QImage(image)) #위에서 변경한 Q이미지를 다시 Q Pixmap으로 설정
@@ -202,11 +206,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
     
     def openImage(self):
-        imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', './') #이미지의 주소를 인식함
+        imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', 'C:\code\dataset\dicom_viewer_0015') #이미지의 주소를 인식함
 
         print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
 
-        folder_path = ".\\" 
+        folder_path = "C:\code\dataset\dicom_viewer_0015" 
 
 
         reader = itk.ImageSeriesReader() #reader 이름의 객체
@@ -343,6 +347,25 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             y = event.globalY() #클릭했을떄의 y좌표를 y로 지정합니다.
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
+    def draw_start(self,event):
+        if event.button() == Qt.LeftButton:
+            self.drawing = True
+            self.last_point = e.pos()
+
+    def draw_setting(self, event):
+        if (event.buttons() & Qt.LeftButton) & self.drawing:
+            painter = QPainter(self.image)
+            painter.setPen(QPen(self.brush_color, self.brush_size, Qt.SolidLine, Qt.RoundCap))
+            painter.drawLine(self.last_point, event.pos())
+            self.last_point = event.pos()
+            self.update()
+    
+    
+    def paintEvent(self, e):
+        
+        canvas = QPainter(self)
+        canvas.drawImage(self.rect(), self.image, self.image.rect())
+        
 
 
 if __name__ == '__main__':
