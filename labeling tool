@@ -25,21 +25,116 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
         self.lbl_pos = QLabel() #텍스트를 나타내기 위함 = 나중에 마우스 위치를 출력
         self.lbl_pos.setAlignment(Qt.AlignCenter) #입력하는 글자를 중간에 위치하도록 함
         
-        self.drawing = False
-        self.brush_size = 5
-        self.brush_color = Qt.black
-        self.last_point = QPoint()
+        self.draw = QVBoxLayout()
+
+        gb = QGroupBox('그리기 종류')
+        self.draw.addWidget(gb)
+
+        box = QVBoxLayout()
+        gb.setLayout(box)
+
+        text = ['line', 'Curve', 'Rectange', 'Ellipse']
+        self.radiobtns = []
+        
+        for i in range(len(text)):
+            self.radiobtns.append(QRadioButton(text[i], self))
+            self.radiobtns[i].clicked.connect(self.radioClicked)
+            box.addWidget(self.radiobtns[i])
+        self.radiobtns[0].setChecked(True)
+        self.drawType = 0
+         
+        
+        gb = QGroupBox('펜 설정')        
+        self.draw.addWidget(gb)        
+ 
+        grid = QGridLayout()      
+        gb.setLayout(grid)        
+ 
+        label = QLabel('선굵기')
+        grid.addWidget(label, 0, 0)
+ 
+        self.combo = QComboBox()
+        grid.addWidget(self.combo, 0, 1)       
+ 
+        for i in range(1, 21):
+            self.combo.addItem(str(i))
+ 
+        label = QLabel('선색상')
+        grid.addWidget(label, 1,0)        
+         
+        self.pencolor = QColor(0,0,0)
+        self.penbtn = QPushButton()        
+        self.penbtn.setStyleSheet('background-color: rgb(0,0,0)')
+        self.penbtn.clicked.connect(self.showColorDlg)
+        grid.addWidget(self.penbtn,1, 1)
+         
+ 
+        # 그룹박스3
+        gb = QGroupBox('붓 설정')        
+        self.draw.addWidget(gb)
+ 
+        hbox = QHBoxLayout()
+        gb.setLayout(hbox)
+ 
+        label = QLabel('붓색상')
+        hbox.addWidget(label)                
+ 
+        self.brushcolor = QColor(255,255,255)
+        self.brushbtn = QPushButton()        
+        self.brushbtn.setStyleSheet('background-color: rgb(255,255,255)')
+        self.brushbtn.clicked.connect(self.showColorDlg)
+        hbox.addWidget(self.brushbtn)
+ 
+        # 그룹박스4
+        gb = QGroupBox('지우개')        
+        self.draw.addWidget(gb)
+ 
+        hbox = QHBoxLayout()
+        gb.setLayout(hbox)        
+         
+        self.checkbox  = QCheckBox('지우개 동작')
+        self.checkbox.stateChanged.connect(self.checkClicked)
+        hbox.addWidget(self.checkbox)   
 
         self.hbox = QHBoxLayout()#수평으로 위젯을 설정
 
         self.hbox.addWidget(self.view_1) #이미지 띄울공간 생성
-        self.hbox.addWidget(self.view_2) 
+        self.hbox.addWidget(self.view_2)
+        self.hbox.addLayout(self.draw) 
         
+
         self.vbox = QVBoxLayout() #수직으로 위젯을 설정
         self.vbox.addLayout(self.hbox) #밑에 버튼과 글씨를 출력하는 수직으로 설정함
         self.vbox.addWidget(self.lbl_pos) #글자가 나오는 공간
         
         self.setLayout(self.vbox) #위젯을 나타냄
+  
+        self.draw.addStretch(1) 
+
+        self.vbox.setStretchFactor(self.draw, 0)
+        self.vbox.setStretchFactor(self.hbox, 1)        
+
+    def radioClicked(self):
+        for i in range(len(self.radiobtns)):
+            if self.radiobtns[i].isChecked():
+                self.drawType = i
+                break
+    def checkClicked(self):
+        pass
+    def showColorDlg(self):       
+         
+        # 색상 대화상자 생성      
+        color = QColorDialog.getColor()
+ 
+        sender = self.sender()
+ 
+        # 색상이 유효한 값이면 참, QFrame에 색 적용
+        if sender == self.penbtn and color.isValid():           
+            self.pencolor = color
+            self.penbtn.setStyleSheet('background-color: {}'.format( color.name()))
+        else:
+            self.brushcolor = color
+            self.brushbtn.setStyleSheet('background-color: {}'.format( color.name()))
 
 
 class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
@@ -63,10 +158,17 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.EntireImage = [] #Pixmap 올라갈 이미지들을 가지고 있는 폴더
         self.adjustedImage = []
 
-
+        self.scene = QGraphicsScene()        
+        self.setScene(self.scene)
+ 
+        self.items = []
+         
+        self.start = QPointF()
+        self.end = QPointF()
+ 
+        self.setRenderHint(QPainter.HighQualityAntialiasing)
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
-        self.image = qimage2ndarray.array2qimage(self.wg.view_2 )
         self.setCentralWidget(self.wg)  #가운데로 설정함
         self.initUI()
 
@@ -106,6 +208,44 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.show() #라벨링 툴을 보여줌
 
+    def moveEvent(self, e):
+        rect = QRectF(self.rect())
+        rect.adjust(0,0,-2,-2)
+ 
+        self.scene.setSceneRect(rect) 
+
+ 
+    def mouseReleaseEvent(self, event):        
+ 
+        if event.button() == QtCore.LeftButton:
+ 
+            if self.parent().checkbox.isChecked():
+                return None
+ 
+            pen = QPen(self.parent().pencolor, self.parent().combo.currentIndex())
+ 
+            if self.parent().drawType == 0:
+ 
+                self.items.clear()
+                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+                 
+                self.scene.addLine(line, pen)
+ 
+            if self.parent().drawType == 2:
+ 
+                brush = QBrush(self.parent().brushcolor)
+ 
+                self.items.clear()
+                rect = QRectF(self.start, self.end)
+                self.scene.addRect(rect, pen, brush)
+ 
+            if self.parent().drawType == 3:
+ 
+                brush = QBrush(self.parent().brushcolor)
+ 
+                self.items.clear()
+                rect = QRectF(self.start, self.end)
+                self.scene.addEllipse(rect, pen, brush)
 
     def showDialog(self): #이미지에 숫자를 지정함
         num, ok = QInputDialog.getInt(self, 'Input ImageNumber', 'Enter Num') #숫자를 입력받을 창을 띄움
@@ -260,6 +400,73 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
         self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
 
+         # e.buttons()는 정수형 값을 리턴, e.button()은 move시 Qt.Nobutton 리턴 
+        if event.buttons() & QtCore.LeftButton:           
+ 
+            self.end = event.pos()
+ 
+            if self.parent().checkbox.isChecked():
+                pen = QPen(QColor(255,255,255), 10)
+                path = QPainterPath()
+                path.moveTo(self.start)
+                path.lineTo(self.end)
+                self.scene.addPath(path, pen)
+                self.start = event.pos()
+                return None
+ 
+            pen = QPen(self.parent().pencolor, self.parent().combo.currentIndex())
+ 
+            # 직선 그리기
+            if self.parent().drawType == 0:
+                 
+                # 장면에 그려진 이전 선을 제거            
+                if len(self.items) > 0:
+                    self.scene.removeItem(self.items[-1])
+                    del(self.items[-1])                
+ 
+                # 현재 선 추가
+                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())                
+                self.items.append(self.scene.addLine(line, pen))
+ 
+            # 곡선 그리기
+            if self.parent().drawType == 1:
+ 
+                # Path 이용
+                path = QPainterPath()
+                path.moveTo(self.start)
+                path.lineTo(self.end)
+                self.scene.addPath(path, pen)
+ 
+                # Line 이용
+                #line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+                #self.scene.addLine(line, pen)
+                 
+                # 시작점을 다시 기존 끝점으로
+                self.start = event.pos()
+ 
+            # 사각형 그리기
+            if self.parent().drawType == 2:
+                brush = QBrush(self.parent().brushcolor)
+ 
+                if len(self.items) > 0:
+                    self.scene.removeItem(self.items[-1])
+                    del(self.items[-1])
+ 
+ 
+                rect = QRectF(self.start, self.end)
+                self.items.append(self.scene.addRect(rect, pen, brush))
+                 
+            # 원 그리기
+            if self.parent().drawType == 3:
+                brush = QBrush(self.parent().brushcolor)
+ 
+                if len(self.items) > 0:
+                    self.scene.removeItem(self.items[-1])
+                    del(self.items[-1])
+ 
+ 
+                rect = QRectF(self.start, self.end)
+                self.items.append(self.scene.addEllipse(rect, pen, brush))
         
         if self.LRClicked: #만약 마우스를 클릭한다면 실행
             
@@ -306,8 +513,13 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             print("move: ", temp_wl, temp_ww)
 
     def mousePressEvent(self, event):
+
+        if event.button() == QtCore.LeftButton:
+            # 시작점 저장
+            self.start = event.pos()
+            self.end = event.pos()  
         
-        if event.buttons () == QtCore.Qt.LeftButton | QtCore.Qt.RightButton: #왼쪽 마우스와 오른쪽 마우스를 클릭했을때
+        if event.buttons () == QtCore.Qt.RightButton: #왼쪽 마우스와 오른쪽 마우스를 클릭했을때
             
             if self.LRClicked == False: #한번 더 클릭을해서 하면 바뀜
                 self.LRClicked = True #확인을 위해서 지속적으로 트루로 바꿈
@@ -347,24 +559,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             y = event.globalY() #클릭했을떄의 y좌표를 y로 지정합니다.
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
-    def draw_start(self,event):
-        if event.button() == Qt.LeftButton:
-            self.drawing = True
-            self.last_point = e.pos()
 
-    def draw_setting(self, event):
-        if (event.buttons() & Qt.LeftButton) & self.drawing:
-            painter = QPainter(self.image)
-            painter.setPen(QPen(self.brush_color, self.brush_size, Qt.SolidLine, Qt.RoundCap))
-            painter.drawLine(self.last_point, event.pos())
-            self.last_point = event.pos()
-            self.update()
-    
-    
-    def paintEvent(self, e):
-        
-        canvas = QPainter(self)
-        canvas.drawImage(self.rect(), self.image, self.image.rect())
         
 
 
