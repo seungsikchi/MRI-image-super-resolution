@@ -33,7 +33,7 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
         box = QVBoxLayout()
         gb.setLayout(box)
 
-        text = ['line', 'Curve', 'Rectange', 'Ellipse']
+        text = ['Curve']
         self.radiobtns = []
         
         for i in range(len(text)):
@@ -136,7 +136,6 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
             self.brushcolor = color
             self.brushbtn.setStyleSheet('background-color: {}'.format( color.name()))
 
-
 class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
     def __init__(self):
@@ -158,15 +157,9 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.EntireImage = [] #Pixmap 올라갈 이미지들을 가지고 있는 폴더
         self.adjustedImage = []
 
-        self.scene = QGraphicsScene()        
-        self.setScene(self.scene)
- 
         self.items = []
-         
         self.start = QPointF()
         self.end = QPointF()
- 
-        self.setRenderHint(QPainter.HighQualityAntialiasing)
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
         self.setCentralWidget(self.wg)  #가운데로 설정함
@@ -208,44 +201,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.show() #라벨링 툴을 보여줌
 
-    def moveEvent(self, e):
-        rect = QRectF(self.rect())
-        rect.adjust(0,0,-2,-2)
- 
-        self.scene.setSceneRect(rect) 
-
- 
-    def mouseReleaseEvent(self, event):        
- 
-        if event.button() == QtCore.LeftButton:
- 
-            if self.parent().checkbox.isChecked():
-                return None
- 
-            pen = QPen(self.parent().pencolor, self.parent().combo.currentIndex())
- 
-            if self.parent().drawType == 0:
- 
-                self.items.clear()
-                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
-                 
-                self.scene.addLine(line, pen)
- 
-            if self.parent().drawType == 2:
- 
-                brush = QBrush(self.parent().brushcolor)
- 
-                self.items.clear()
-                rect = QRectF(self.start, self.end)
-                self.scene.addRect(rect, pen, brush)
- 
-            if self.parent().drawType == 3:
- 
-                brush = QBrush(self.parent().brushcolor)
- 
-                self.items.clear()
-                rect = QRectF(self.start, self.end)
-                self.scene.addEllipse(rect, pen, brush)
 
     def showDialog(self): #이미지에 숫자를 지정함
         num, ok = QInputDialog.getInt(self, 'Input ImageNumber', 'Enter Num') #숫자를 입력받을 창을 띄움
@@ -326,7 +281,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.lbl_original_img.addPixmap(image) #원본이미지를 보기위한 위젯을 제공
         self.wg.lbl_blending_img.addPixmap(image) #마스킹 이미지를 보기위한 위젯을 제공
         self.wg.view_1.setScene(self.wg.lbl_original_img) #원본 이미지를 보도록 설정
-        self.wg.view_2.setScene(self.wg.lbl_original_img) #마스킹 이미지를 보도록 설정
+        self.wg.view_2.setScene(self.wg.lbl_blending_img) #마스킹 이미지를 보도록 설정
         self.wg.view_1.show() #원본이미지를 출력함
         self.wg.view_2.show() #마스킹 출력함
 
@@ -387,12 +342,16 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.wg.lbl_blending_img.addPixmap(image) #원본이미지를 보기위한 위젯을 만듭니다 #나중에 블랭딩된 이미지로 바꿔야함
         self.wg.view_2.setScene(self.wg.lbl_blending_img) #원본이미지를 띄우기위해 지정
+        rect = QRectF(self.rect())
+        self.wg.view_2.setSceneRect(rect)
         self.wg.view_2.show() #원본이미지를 띄웁니다.
 
+        
         self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent #MouseMoveEvent함수를 view_1의 MouseMoveEvent로 설정함
         self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent #MouseMoveEvent함수를 view_2의 MouseMoveEvent로 설정함
         self.wg.view_1.setMouseTracking(True) #view_1의 마우스의 이동을 항상 감지합니다.
         self.wg.view_2.setMouseTracking(True) #view_2의 마우스의 이동을 항상 감지합니다.
+
 
 
     def mouseMoveEvent(self, event): #마우스가 위치를 감지하는 함수
@@ -400,73 +359,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
         self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
 
-         # e.buttons()는 정수형 값을 리턴, e.button()은 move시 Qt.Nobutton 리턴 
-        if event.buttons() & QtCore.LeftButton:           
- 
-            self.end = event.pos()
- 
-            if self.parent().checkbox.isChecked():
-                pen = QPen(QColor(255,255,255), 10)
-                path = QPainterPath()
-                path.moveTo(self.start)
-                path.lineTo(self.end)
-                self.scene.addPath(path, pen)
-                self.start = event.pos()
-                return None
- 
-            pen = QPen(self.parent().pencolor, self.parent().combo.currentIndex())
- 
-            # 직선 그리기
-            if self.parent().drawType == 0:
-                 
-                # 장면에 그려진 이전 선을 제거            
-                if len(self.items) > 0:
-                    self.scene.removeItem(self.items[-1])
-                    del(self.items[-1])                
- 
-                # 현재 선 추가
-                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())                
-                self.items.append(self.scene.addLine(line, pen))
- 
-            # 곡선 그리기
-            if self.parent().drawType == 1:
- 
-                # Path 이용
-                path = QPainterPath()
-                path.moveTo(self.start)
-                path.lineTo(self.end)
-                self.scene.addPath(path, pen)
- 
-                # Line 이용
-                #line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
-                #self.scene.addLine(line, pen)
-                 
-                # 시작점을 다시 기존 끝점으로
-                self.start = event.pos()
- 
-            # 사각형 그리기
-            if self.parent().drawType == 2:
-                brush = QBrush(self.parent().brushcolor)
- 
-                if len(self.items) > 0:
-                    self.scene.removeItem(self.items[-1])
-                    del(self.items[-1])
- 
- 
-                rect = QRectF(self.start, self.end)
-                self.items.append(self.scene.addRect(rect, pen, brush))
-                 
-            # 원 그리기
-            if self.parent().drawType == 3:
-                brush = QBrush(self.parent().brushcolor)
- 
-                if len(self.items) > 0:
-                    self.scene.removeItem(self.items[-1])
-                    del(self.items[-1])
- 
- 
-                rect = QRectF(self.start, self.end)
-                self.items.append(self.scene.addEllipse(rect, pen, brush))
         
         if self.LRClicked: #만약 마우스를 클릭한다면 실행
             
@@ -513,11 +405,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             print("move: ", temp_wl, temp_ww)
 
     def mousePressEvent(self, event):
-
-        if event.button() == QtCore.LeftButton:
-            # 시작점 저장
-            self.start = event.pos()
-            self.end = event.pos()  
         
         if event.buttons () == QtCore.Qt.RightButton: #왼쪽 마우스와 오른쪽 마우스를 클릭했을때
             
@@ -559,11 +446,23 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             y = event.globalY() #클릭했을떄의 y좌표를 y로 지정합니다.
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
+        
+        if event.buttons() & QtCore.Qt.LeftButton:
+            self.start = event.pos()
+            self.end = event.pos()
+            
+            pen = QPen(QColor(0,0,0), 10)
 
+            path = QPainterPath()
+            path.moveTo(self.start)
+            path.lineTo(self.end)
+            self.wg.lbl_original_img.addPath(path, pen)
+            self.start = event.pos()
         
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = MyApp()
+    ex.show()
     sys.exit(app.exec_())
