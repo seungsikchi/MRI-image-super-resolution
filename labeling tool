@@ -157,9 +157,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.EntireImage = [] #Pixmap 올라갈 이미지들을 가지고 있는 폴더
         self.adjustedImage = []
 
+        self.scene = QGraphicsScene
         self.items = []
         self.start = QPointF()
         self.end = QPointF()
+        
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
         self.setCentralWidget(self.wg)  #가운데로 설정함
@@ -343,7 +345,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.lbl_blending_img.addPixmap(image) #원본이미지를 보기위한 위젯을 만듭니다 #나중에 블랭딩된 이미지로 바꿔야함
         self.wg.view_2.setScene(self.wg.lbl_blending_img) #원본이미지를 띄우기위해 지정
         rect = QRectF(self.rect())
-        self.wg.view_2.setSceneRect(rect)
+        self.wg.lbl_blending_img.setSceneRect(rect)
         self.wg.view_2.show() #원본이미지를 띄웁니다.
 
         
@@ -446,18 +448,27 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             y = event.globalY() #클릭했을떄의 y좌표를 y로 지정합니다.
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
+
         
         if event.buttons() & QtCore.Qt.LeftButton:
-            self.start = event.pos()
+            print("################################################################")
             self.end = event.pos()
-            
-            pen = QPen(QColor(0,0,0), 10)
 
+            pen = QPen(QColor(0, 0, 0), 10)
             path = QPainterPath()
             path.moveTo(self.start)
             path.lineTo(self.end)
-            self.wg.lbl_original_img.addPath(path, pen)
+            print(self.start)
+            print(self.end)
+            self.wg.lbl_blending_img.addPath(path, pen)
             self.start = event.pos()
+            print("111111111111111111111111111111111111111111111111111111111111")
+        
+    
+    def mouselocation(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            self.start = event.pos()
+            self.end = event.pos()
         
 
 
