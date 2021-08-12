@@ -361,6 +361,20 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
         self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
 
+        if event.buttons() & QtCore.Qt.LeftButton:
+            print("################################################################")
+            self.end = event.pos()
+
+            pen = QPen(QColor(0, 0, 0), 10)
+            path = QPainterPath()
+            path.moveTo(self.start)
+            path.lineTo(self.end)
+            print(self.start)
+            print(self.end)
+            self.wg.lbl_blending_img.addPath(path, pen)
+            self.start = event.pos()
+            print("111111111111111111111111111111111111111111111111111111111111")
+
         
         if self.LRClicked: #만약 마우스를 클릭한다면 실행
             
@@ -405,6 +419,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
                 temp_ww = 0
 
             print("move: ", temp_wl, temp_ww)
+            
 
     def mousePressEvent(self, event):
         
@@ -449,23 +464,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
 
-        
-        if event.buttons() & QtCore.Qt.LeftButton:
-            print("################################################################")
-            self.end = event.pos()
-
-            pen = QPen(QColor(0, 0, 0), 10)
-            path = QPainterPath()
-            path.moveTo(self.start)
-            path.lineTo(self.end)
-            print(self.start)
-            print(self.end)
-            self.wg.lbl_blending_img.addPath(path, pen)
-            self.start = event.pos()
-            print("111111111111111111111111111111111111111111111111111111111111")
-        
-    
-    def mouselocation(self, event):
         if event.button() == QtCore.Qt.LeftButton:
             self.start = event.pos()
             self.end = event.pos()
