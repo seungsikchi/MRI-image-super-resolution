@@ -33,7 +33,7 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
         box = QVBoxLayout()
         gb.setLayout(box)
 
-        text = ['Curve']
+        text = ['Curve','polygon']
         self.radiobtns = []
         
         for i in range(len(text)):
@@ -136,7 +136,7 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
             self.brushcolor = color
             self.brushbtn.setStyleSheet('background-color: {}'.format( color.name()))
 
-class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
+class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
 
     def __init__(self):
         super().__init__()
@@ -156,11 +156,13 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.cur_image = [] #
         self.EntireImage = [] #Pixmap 올라갈 이미지들을 가지고 있는 폴더
         self.adjustedImage = []
+        self.location = [] #polygon의 위치 좌표
 
-        self.scene = QGraphicsScene
+        self.viewer = QGraphicsView()
         self.items = []
         self.start = QPointF()
         self.end = QPointF()
+        
         
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
@@ -189,13 +191,20 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         
         btn2 = QPushButton('&next', self) #next 버튼을 만듬
         btn2.move(800, 565) #버튼위치를 설정
-        btn1.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
-        btn1.toggle()
+        btn2.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
+        btn2.toggle()
+
+        btn3 = QPushButton('&Polygon', self)
+        btn3.move(900, 565)
+        btn3.setCheckable(True)
+        btn3.toggle()
 
         btn1.setShortcut('Ctrl+1') #단축키 Ctrl과 1을 누를경우 previous를 실행
         btn2.setShortcut('Ctrl+2') #단축키 Ctrl과 2을 누를경우 next를 실행
+        btn3.setShortcut('Ctrl+3')
         btn1.clicked.connect(self.btn1_clicked) #버튼을 클릭할 경우 btn1_clicked를 실행
         btn2.clicked.connect(self.btn2_clicked) #버튼을 클릭할 경우 btn2_clicked를 실행
+        btn3.clicked.connect(self.btn3_clicked)
         
         self.setWindowTitle('Test Image') #라벨링 툴 프로그램 이름 설정
 
@@ -287,6 +296,8 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_1.show() #원본이미지를 출력함
         self.wg.view_2.show() #마스킹 출력함
 
+    def btn3_clicked(self):
+        self.paintEvent()
 
 
     def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
@@ -303,11 +314,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
     
     def openImage(self):
-        imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', 'C:\code\dataset\dicom_viewer_0015') #이미지의 주소를 인식함
+        imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', 'C:\code\dataset\dicom_viewer_0015\Routine_T2') #이미지의 주소를 인식함
 
         print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
 
-        folder_path = "C:\code\dataset\dicom_viewer_0015" 
+        folder_path = "C:\code\dataset\dicom_viewer_0015\Routine_T2" 
 
 
         reader = itk.ImageSeriesReader() #reader 이름의 객체
@@ -364,15 +375,23 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         if event.buttons() & QtCore.Qt.LeftButton:
             print("################################################################")
             self.end = event.pos()
+            
+            if self.wg.drawType == 0:
+                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())              
+                path = QPainterPath()
+                path.moveTo(self.start)
+                path.lineTo(self.end)
+                print(self.start)
+                print(self.end)
+                self.wg.lbl_blending_img.addPath(path, pen)
+                self.start = event.pos()
 
-            pen = QPen(QColor(0, 0, 0), 10)
-            path = QPainterPath()
-            path.moveTo(self.start)
-            path.lineTo(self.end)
-            print(self.start)
-            print(self.end)
-            self.wg.lbl_blending_img.addPath(path, pen)
-            self.start = event.pos()
+            if self.wg.drawType == 1:
+                x = event.globalX()
+                y = event.globalY()
+
+                QPoint = QPoint(x, y)
+                self.location.append(QPoint)
             print("111111111111111111111111111111111111111111111111111111111111")
 
         
@@ -467,6 +486,19 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         if event.button() == QtCore.Qt.LeftButton:
             self.start = event.pos()
             self.end = event.pos()
+
+    def draw_polygon(self, qp):
+        polygon1 = QPolygon(self.location)
+        qp.setPen(QPen(Qt.black,10))
+        qp.setBrush(QBrush(QColor(Qt.black)))
+        qp.drawPolygon(polygon1)
+
+    def paintEvent(self, event):
+        qp = QPainter()
+        qp.begin(self)
+        self.draw_polygon(qp)
+        qp.end()            
+
         
 
 
