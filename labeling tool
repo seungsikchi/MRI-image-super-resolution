@@ -162,7 +162,7 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.items = []
         self.start = QPointF()
         self.end = QPointF()
-        
+        self.polygon = QPoint()
         
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
@@ -297,7 +297,7 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_2.show() #마스킹 출력함
 
     def btn3_clicked(self):
-        self.paintEvent()
+        connect(self.paintEvent)
 
 
     def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
@@ -387,12 +387,19 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
                 self.start = event.pos()
 
             if self.wg.drawType == 1:
-                x = event.globalX()
-                y = event.globalY()
-
-                QPoint = QPoint(x, y)
-                self.location.append(QPoint)
+                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
+                brush = QBrush(self.wg.brushcolor)
+ 
+                if len(self.items) > 0:
+                    self.wg.lbl_blending_img.removeItem(self.items[-1])
+                    del(self.items[-1])
+ 
+ 
+                polygon = QPolygonF(self.location)
+                self.items.append(self.wg.lbl_blending_img.addPolygon(polygon, pen, brush))
+        
             print("111111111111111111111111111111111111111111111111111111111111")
+
 
         
         if self.LRClicked: #만약 마우스를 클릭한다면 실행
@@ -484,22 +491,30 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
 
         if event.button() == QtCore.Qt.LeftButton:
-            self.start = event.pos()
-            self.end = event.pos()
+            if self.wg.drawType == 0:
+                self.start = event.pos()
+                self.end = event.pos()
+            if self.wg.drawType == 1:
+                self.polygon = event.pos()
+                self.location.append(self.polygon)
+                print("좌표가 추가되었습니다")
 
-    def draw_polygon(self, qp):
-        polygon1 = QPolygon(self.location)
-        qp.setPen(QPen(Qt.black,10))
-        qp.setBrush(QBrush(QColor(Qt.black)))
-        qp.drawPolygon(polygon1)
+    def mouseReleaseEvent(self, event):        
+ 
+        if event.button() == QtCore.Qt.LeftButton:
+ 
+            if self.wg.checkbox.isChecked():
+                return None
+ 
+            pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
 
-    def paintEvent(self, event):
-        qp = QPainter()
-        qp.begin(self)
-        self.draw_polygon(qp)
-        qp.end()            
-
-        
+            if self.wg.drawType == 1:
+ 
+                brush = QBrush(self.wg.brushcolor)
+ 
+                self.items.clear()
+                Polygon = QPolygonF(self.start, self.end)
+                self.wg.lbl_blending_img.addPolygon(Polygon, pen, brush)    
 
 
 if __name__ == '__main__':
