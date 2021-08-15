@@ -136,7 +136,42 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
             self.brushcolor = color
             self.brushbtn.setStyleSheet('background-color: {}'.format( color.name()))
 
-class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
+class AdjustDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setupUI()
+
+        self.level = int
+        self.width = int
+    
+    def setupUI(self):
+        self.setGeometry(1100, 200, 300, 100)
+        self.setWindowTitle("Sign In")
+        self.setWindowIcon(QIcon('icon.png'))
+
+        label1 = QLabel("level: ")
+        label2 = QLabel("Width: ")
+
+        self.lineEdit1 = QLineEdit()
+        self.lineEdit2 = QLineEdit()
+        self.pushButton1= QPushButton("입력 완료")
+        self.pushButton1.clicked.connect(self.pushButtonClicked)
+
+        layout = QGridLayout()
+        layout.addWidget(label1, 0, 0)
+        layout.addWidget(self.lineEdit1, 0, 1)
+        layout.addWidget(self.pushButton1, 0, 2)
+        layout.addWidget(label2, 1, 0)
+        layout.addWidget(self.lineEdit2, 1, 1)
+
+        self.setLayout(layout)
+    
+    def pushButtonClicked(self):
+        self.level = self.lineEdit1.text()
+        self.width = self.lineEdit2.text()
+        self.close()
+
+class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
     def __init__(self):
         super().__init__()
@@ -163,7 +198,7 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.start = QPointF()
         self.end = QPointF()
         self.polygon = QPoint()
-        
+        self.label = QLabel()
 
         self.wg = MyWidget() #위젯 클래스의 객체를 들고옴
         self.setCentralWidget(self.wg)  #가운데로 설정함
@@ -173,10 +208,15 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         
         
     def initUI(self): #기초 UI = butten이나 단축키
-        openAction = QAction(QIcon('exit.png'), 'Open', self) #이미지를 불러오는 버튼 #파일이 있는 폴더를 열음
+        openAction = QAction(QIcon('C:\code\icon\open.png'), 'Open', self) #이미지를 불러오는 버튼 #파일이 있는 폴더를 열음
         openAction.triggered.connect(self.openImage) #눌리면 이미지를 불러오는 함수로 넘아감
         self.toolbar = self.addToolBar('Open') #툴바 open을 만듬
         self.toolbar.addAction(openAction) #open을 누르면 openAction 함수를 실행
+        
+        adjsutAction = QAction(QIcon('C:\code\icon\Adjust.png'), "Adjust", self)
+        adjsutAction.triggered.connect(self.AdjustDialogClicked)
+        self.toolbar = self.addToolBar("Adjust")
+        self.toolbar.addAction(adjsutAction)
 
         Dbtn = QPushButton('&ImgNum', self) #ImgNum 버튼을 만듬
         Dbtn.move(900, 565) #버튼위치를 설정
@@ -194,17 +234,10 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         btn2.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
         btn2.toggle()
 
-        btn3 = QPushButton('&Polygon', self)
-        btn3.move(900, 565)
-        btn3.setCheckable(True)
-        btn3.toggle()
-
         btn1.setShortcut('Ctrl+1') #단축키 Ctrl과 1을 누를경우 previous를 실행
         btn2.setShortcut('Ctrl+2') #단축키 Ctrl과 2을 누를경우 next를 실행
-        btn3.setShortcut('Ctrl+3')
         btn1.clicked.connect(self.btn1_clicked) #버튼을 클릭할 경우 btn1_clicked를 실행
         btn2.clicked.connect(self.btn2_clicked) #버튼을 클릭할 경우 btn2_clicked를 실행
-        btn3.clicked.connect(self.btn3_clicked)
         
         self.setWindowTitle('Test Image') #라벨링 툴 프로그램 이름 설정
 
@@ -237,6 +270,27 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_2.setScene(self.wg.lbl_blending_img) #라벨링 할 이미지를 보도록 설정
         self.wg.view_1.show()#원본이미지를 띄움
         self.wg.view_2.show()#라벨링 이미지를 띄움
+    
+    def AdjustDialogClicked(self):
+        dlg = AdjustDialog()
+        dlg.exec_()
+        self.level = dlg.level
+        self.width = dlg.width
+        self.label.setText("level: %s width: %s" % (self.level, self.width))
+        self.level = int(self.level)
+        self.width = int(self.width)
+
+        image = self.AdjustPixelRange(self.cur_image, self.level, self.width) #이미지를 받아서 window의 높이와 너비를 바꿔서 image로 설정
+        
+        image = qimage2ndarray.array2qimage(image)  #Q이미지를 numpy array로 바꿈
+        image = QPixmap.fromImage(QImage(image))  #numpy array를 pixmap으로 변환
+        self.wg.lbl_original_img.addPixmap(image)  #원본이미지의 Q이미지를 pix맵으로 설정
+        self.wg.lbl_blending_img.addPixmap(image)  #라벨링 되어있는 이미지의 Q이미지를 pix맵으로 설정
+        self.wg.view_1.setScene(self.wg.lbl_original_img) #원본 이미지를 보도록 설정
+        self.wg.view_2.setScene(self.wg.lbl_blending_img) #라벨링 할 이미지를 보도록 설정
+        self.wg.view_1.show()#원본이미지를 띄움
+        self.wg.view_2.show()#라벨링 이미지를 띄움
+
 
     def onChanged(self,text):
         self.lbl.setText(text)#마우스 위치를 알려주는 글을 입력
@@ -296,9 +350,6 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_1.show() #원본이미지를 출력함
         self.wg.view_2.show() #마스킹 출력함
 
-    def btn3_clicked(self):
-        connect(self.paintEvent)
-
 
     def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
         Lower = level - (width/2.0) #이미지의 중간점에서 그 아래 부분을 Lower로 설정
@@ -318,7 +369,7 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
 
         print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
 
-        folder_path = "C:\code\dataset\dicom_viewer_0015\Routine_T2" 
+        folder_path = "C:\code\dataset\dicom_viewer_0015\Galan_Brain_Aice_Routine (T1 FLAIR, T2, T2 FLAIR)_20210811\data1" 
 
 
         reader = itk.ImageSeriesReader() #reader 이름의 객체
@@ -340,6 +391,10 @@ class MyApp(QMainWindow, ): #viewer의 기초 수치 좌우 넒이 등등
         self.NofI = self.EntireImage.shape[0] #이미지의 개수로 지정
         self.Nx = self.EntireImage.shape[1] #이미지의 x길이로 지정
         self.Ny = self.EntireImage.shape[2] #이미지의 y길이로 지정
+
+        self.wg.view_1.setFixedSize(self.EntireImage.shape[1],self.EntireImage.shape[2] ) #원본이미지 공간 설정
+        self.wg.view_2.setFixedSize(self.EntireImage.shape[1], self.EntireImage.shape[2])
+        print("view size가", self.EntireImage.shape[1],"와",self.EntireImage.shape[2],"로 설정 되었습니다.")
 
         self.cur_image = self.EntireImage[self.cur_idx]  #위에서 불러왔던 이미지들중에 입력받는 이미지의 이미지를 부름 #첫번째 이미지를 띄움
          
