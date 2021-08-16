@@ -23,7 +23,7 @@ class MyWidget(QWidget): #viewer쪽 초기화 함수
         self.view_2.setFixedSize(514, 514) 
 
         self.lbl_pos = QLabel() #텍스트를 나타내기 위함 = 나중에 마우스 위치를 출력
-        self.lbl_pos.setAlignment(Qt.AlignCenter) #입력하는 글자를 중간에 위치하도록 함
+        self.lbl_pos.setAlignment(Qt.AlignVCenter) #입력하는 글자를 중간에 위치하도록 함
         
         self.draw = QVBoxLayout()
 
@@ -234,11 +234,18 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         btn2.setCheckable(True)# 버튼을 누른상태와 그렇지 않은 상태를 구분함 
         btn2.toggle()
 
+        btn3 = QPushButton('&undo', self)
+        btn3.move(600, 565)
+        btn3.setCheckable(True)
+        btn3.toggle()
+
         btn1.setShortcut('Ctrl+1') #단축키 Ctrl과 1을 누를경우 previous를 실행
         btn2.setShortcut('Ctrl+2') #단축키 Ctrl과 2을 누를경우 next를 실행
+        btn3.setShortcut('Ctrl+Z')
         btn1.clicked.connect(self.btn1_clicked) #버튼을 클릭할 경우 btn1_clicked를 실행
         btn2.clicked.connect(self.btn2_clicked) #버튼을 클릭할 경우 btn2_clicked를 실행
-        
+        btn3.clicked.connect(self.btn3_clicked)
+
         self.setWindowTitle('Test Image') #라벨링 툴 프로그램 이름 설정
 
         self.setGeometry(300, 300, 1100, 600) #띄울 위치 2개 크기 2개
@@ -350,6 +357,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_1.show() #원본이미지를 출력함
         self.wg.view_2.show() #마스킹 출력함
 
+    def btn3_clicked(self): #btn2를 클릭할때 실행할 함수 = next
+        print(self.items)
+        self.items.pop(-1)
+        print(self.items)
+        self.update()
 
     def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
         Lower = level - (width/2.0) #이미지의 중간점에서 그 아래 부분을 Lower로 설정
@@ -369,7 +381,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
 
-        folder_path = "C:\code\dataset\dicom_viewer_0015\Galan_Brain_Aice_Routine (T1 FLAIR, T2, T2 FLAIR)_20210811\data1" 
+        folder_path = "C:\code\dataset\dicom_viewer_0015\Routine_T2" 
 
 
         reader = itk.ImageSeriesReader() #reader 이름의 객체
@@ -433,21 +445,15 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             
             if self.wg.drawType == 0:
                 pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())              
-                path = QPainterPath()
-                path.moveTo(self.start)
-                path.lineTo(self.end)
-                print(self.start)
-                print(self.end)
-                self.wg.lbl_blending_img.addPath(path, pen)
+                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+                self.items.append(self.wg.lbl_blending_img.addLine(line, pen))
+                 
+                # 시작점을 다시 기존 끝점으로
                 self.start = event.pos()
 
             if self.wg.drawType == 1:
                 pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
                 brush = QBrush(self.wg.brushcolor)
- 
-                if len(self.items) > 0:
-                    self.wg.lbl_blending_img.removeItem(self.items[-1])
-                    del(self.items[-1])
  
  
                 polygon = QPolygonF(self.location)
