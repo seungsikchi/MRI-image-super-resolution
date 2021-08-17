@@ -195,7 +195,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.viewer = QGraphicsView()
         self.items = []
-        self.start = QPointF()
+        self.drawing = False
         self.end = QPointF()
         self.polygon = QPoint()
         self.label = QLabel()
@@ -422,8 +422,6 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.wg.lbl_blending_img.addPixmap(image) #원본이미지를 보기위한 위젯을 만듭니다 #나중에 블랭딩된 이미지로 바꿔야함
         self.wg.view_2.setScene(self.wg.lbl_blending_img) #원본이미지를 띄우기위해 지정
-        rect = QRectF(self.rect())
-        self.wg.lbl_blending_img.setSceneRect(rect)
         self.wg.view_2.show() #원본이미지를 띄웁니다.
 
         
@@ -434,7 +432,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
 
 
-    def mouseMoveEvent(self, event): #마우스가 위치를 감지하는 함수
+    def mouseMoveEvent(self, event,qp): #마우스가 위치를 감지하는 함수
         txt = "마우스가 위치한 이미지의 좌표 ; x={0},y={1}".format(event.x(), event.y()) #마우스 위치한 좌표 출력 내용 저장
         self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
         self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
@@ -444,9 +442,12 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             self.end = event.pos()
             
             if self.wg.drawType == 0:
-                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())              
-                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
-                self.items.append(self.wg.lbl_blending_img.addLine(line, pen))
+                painter = Qpainter(self.wg.view_2)
+                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex(), QtCore.Qt.SolidLine)
+                painter.setPen(pen)   
+                painter.drowPath(self.end, event.pos())
+                self.end = event.pos()
+                self.update()
                  
                 # 시작점을 다시 기존 끝점으로
                 self.start = event.pos()
@@ -553,7 +554,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         if event.button() == QtCore.Qt.LeftButton:
             if self.wg.drawType == 0:
-                self.start = event.pos()
+                self.drawing = True
                 self.end = event.pos()
             if self.wg.drawType == 1:
                 self.polygon = event.pos()
@@ -566,6 +567,9 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
  
             if self.wg.checkbox.isChecked():
                 return None
+
+            if self.wg.drawType == 0:
+                self.drawing == False
  
             pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
 
@@ -576,6 +580,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
                 self.items.clear()
                 Polygon = QPolygonF(self.start, self.end)
                 self.wg.lbl_blending_img.addPolygon(Polygon, pen, brush)    
+    
+    def paintEvent(self, event):
+        canvas = QPainter(self)
+        image = qpixmap_var.toImage()
+        canvas.drawImage(self.rect(),image, image.rect())
 
 
 if __name__ == '__main__':
