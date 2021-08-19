@@ -195,7 +195,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         self.viewer = QGraphicsView()
         self.items = []
-        self.drawing = False
+        self.start = QPointF()
         self.end = QPointF()
         self.polygon = QPoint()
         self.label = QLabel()
@@ -356,12 +356,12 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         self.wg.view_2.setScene(self.wg.lbl_blending_img) #마스킹 이미지를 보도록 설정
         self.wg.view_1.show() #원본이미지를 출력함
         self.wg.view_2.show() #마스킹 출력함
-
+        
     def btn3_clicked(self): #btn2를 클릭할때 실행할 함수 = next
         print(self.items)
         self.items.pop(-1)
         print(self.items)
-        self.update()
+        self.update()#paintEvent사용해야지 쓸수있음
 
     def AdjustPixelRange(self, image, level, width): #house filed를 조정하기 위한 함수 
         Lower = level - (width/2.0) #이미지의 중간점에서 그 아래 부분을 Lower로 설정
@@ -381,7 +381,12 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
         print("open", imagePath) #이미지를 열었다고 알려주고 image의 주소를 출력함
 
-        folder_path = "C:\code\dataset\dicom_viewer_0015\Routine_T2" 
+        folder_path = ''
+        for i in range(len(imagePath.split('/')) - 1): 
+                if i == len(imagePath.split('/')) - 1:
+                    folder_path = folder_path + imagePath.split('/')[i]
+                else:
+                    folder_path = folder_path + imagePath.split('/')[i] + '/'
 
 
         reader = itk.ImageSeriesReader() #reader 이름의 객체
@@ -432,7 +437,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
 
 
-    def mouseMoveEvent(self, event,qp): #마우스가 위치를 감지하는 함수
+    def mouseMoveEvent(self, event): #마우스가 위치를 감지하는 함수
         txt = "마우스가 위치한 이미지의 좌표 ; x={0},y={1}".format(event.x(), event.y()) #마우스 위치한 좌표 출력 내용 저장
         self.wg.lbl_pos.setText(txt) #Mywidget에서 설정한 글자 나오는 공간에 이 글자가 나오도록 설정
         self.wg.lbl_pos.adjustSize() #텍스트 내용을 출력하고 자동으로 크기를 조정함
@@ -442,12 +447,11 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             self.end = event.pos()
             
             if self.wg.drawType == 0:
-                painter = Qpainter(self.wg.view_2)
-                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex(), QtCore.Qt.SolidLine)
-                painter.setPen(pen)   
-                painter.drowPath(self.end, event.pos())
-                self.end = event.pos()
-                self.update()
+                
+                pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())              
+                line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+                print(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+                self.items.append(self.wg.lbl_blending_img.addLine(line, pen))
                  
                 # 시작점을 다시 기존 끝점으로
                 self.start = event.pos()
@@ -455,8 +459,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             if self.wg.drawType == 1:
                 pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
                 brush = QBrush(self.wg.brushcolor)
- 
- 
+
                 polygon = QPolygonF(self.location)
                 self.items.append(self.wg.lbl_blending_img.addPolygon(polygon, pen, brush))
         
@@ -466,7 +469,7 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
         
         if self.LRClicked: #만약 마우스를 클릭한다면 실행
             
-            mX = float(event.globalX())#지금 마우스 좌표 x값
+            mX,= float(event.globalX())#지금 마우스 좌표 x값
             mY = float(event.globalY())#지금 마우스 좌표 y값
             
            
@@ -510,6 +513,15 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
             
 
     def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            if self.wg.drawType == 0:
+                self.start = event.pos()
+                self.end = event.pos()
+            if self.wg.drawType == 1:
+                self.polygon = event.pos()
+                print(self.polygon)
+                self.location.append(self.polygon)
+                print("좌표가 추가되었습니다")
         
         if event.buttons () == QtCore.Qt.RightButton: #왼쪽 마우스와 오른쪽 마우스를 클릭했을때
             
@@ -552,24 +564,12 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
 
             self.LRpoint = [x, y] #마우스가 클릭했을때의 좌표를 LRPoint리스트로 저장합니다.
 
-        if event.button() == QtCore.Qt.LeftButton:
-            if self.wg.drawType == 0:
-                self.drawing = True
-                self.end = event.pos()
-            if self.wg.drawType == 1:
-                self.polygon = event.pos()
-                self.location.append(self.polygon)
-                print("좌표가 추가되었습니다")
-
     def mouseReleaseEvent(self, event):        
  
         if event.button() == QtCore.Qt.LeftButton:
  
             if self.wg.checkbox.isChecked():
                 return None
-
-            if self.wg.drawType == 0:
-                self.drawing == False
  
             pen = QPen(QColor(self.wg.pencolor),self.wg.combo.currentIndex())
 
@@ -577,14 +577,8 @@ class MyApp(QMainWindow): #viewer의 기초 수치 좌우 넒이 등등
  
                 brush = QBrush(self.wg.brushcolor)
  
-                self.items.clear()
-                Polygon = QPolygonF(self.start, self.end)
+                Polygon = QPolygonF(self.location)
                 self.wg.lbl_blending_img.addPolygon(Polygon, pen, brush)    
-    
-    def paintEvent(self, event):
-        canvas = QPainter(self)
-        image = qpixmap_var.toImage()
-        canvas.drawImage(self.rect(),image, image.rect())
 
 
 if __name__ == '__main__':
