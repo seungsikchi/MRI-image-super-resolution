@@ -251,10 +251,14 @@ class MyApp(QMainWindow):
         self.end = QPointF()  # 그리기 끝난 좌표점
         self.polygon = QPoint()  # 폴리곤의 좌표
         self.label = QLabel()  # QLabel 메서드를 들고옴
+        self.point_location = []
+        self.Point = []
+        self.location = []
 
         self.wg = MyWidget()  # MyWidget 클래스를 사용하기 위해서 객체를 생성
         self.setCentralWidget(self.wg)  # QMainWindow 화면에 레이아웃과 위젯을 표시하기 위해사용
         self.initUI()  # 멤버 메소드 호출
+
 
     def initUI(self):
         openDcmAction = QAction(QIcon('./icon/openDcm.png'), 'openDcm', self)
@@ -293,10 +297,17 @@ class MyApp(QMainWindow):
 
     # btn1(uodo)가 클릭 되었을 때
     def undoButton(self):
+        pen = QPen(QColor(self.wg.pencolor), self.wg.combo.currentIndex())
+        self.items.pop()
         print(self.items)
-        self.items.pop(-1)
-        print(self.items)
-        self.update()
+        self.wg.lbl_blending_img.clear()
+        self.viewUpdate(1)
+
+        for LineB in range(len(self.items)):
+            for Line in self.items[LineB]:
+                print("undo start",LineB)
+                self.wg.lbl_blending_img.addLine(Line, pen)
+                
 
     # btn2(s_r)가 클릭 되었을 때
     def s_rButton(self):
@@ -391,6 +402,12 @@ class MyApp(QMainWindow):
                 temp_space = np.zeros((self.NofI, self.Ny, self.Nx, self.rgb))# (20 512 512 3)
                 self.vx.Create_Mask_Space(temp_space) # 사실 얘가 반환하는 건 존재하지 않는다. -> None
                 self.mask_space = self.vx.m_Voxel # (z, y, x, rgb)
+                
+                for i in range(self.EntireImage.shape[1]):
+                    for j in range(self.EntireImage.shape[2]):
+                        self.Point.append(QPointF(j, i))
+                
+                print(self.Point)
 
                 self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent  # view_1의 mouseMoveEvent 갱신
                 self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent
@@ -552,15 +569,17 @@ class MyApp(QMainWindow):
         txt = "마우스가 위치한 이미지의 좌표 ; x={0},y={1}".format(event.x(), event.y())
 
         self.wg.lbl_pos.setText(txt)
-        self.wg.lbl_pos.adjustSize()  # 내용에 맞게 위젯의 크기를 조정한다. https://doc.qt.io/qt-5/qwidget.html#adjustSize
+        self.wg.lbl_pos.adjustSize()  # 내용에 맞게 위젯의 크기를 조정한다.
         
         if event.buttons() & QtCore.Qt.LeftButton:  # 그리는 기능
             self.end = event.pos()
             
-            if self.start.x() < 511:
+            if self.start.x() < 516:
                 if self.wg.drawType == 0:  # 그리는 방법을 Curve로 설정했을경우 실행
                     pen = QPen(QColor(self.wg.pencolor), self.wg.combo.currentIndex()) # .bin을 이용해서 다시 그려야할 때 -> QColor에 rgb값을 넣어도 되는지 등 테스트 
                     line = QLineF(self.start.x(), self.start.y(), self.end.x(), self.end.y())
+
+                    self.point_location.append(line)
                     
                     # print(self.start.x(), self.start.y())
                     color_hex = QColor(self.wg.pencolor).name().split('#')[-1] # #RRGGBB -> RRGGBB 
@@ -577,7 +596,25 @@ class MyApp(QMainWindow):
                     pen = QPen(QColor(self.wg.pencolor), self.wg.combo.currentIndex())
                     brush = QBrush(self.wg.brushcolor)
                     polygon = QPolygonF(self.location)
-                    self.items.append(self.wg.lbl_blending_img.addPolygon(polygon, pen, brush))
+                    color_hex = QColor(self.wg.brushcolor).name().split('#')[-1] # #RRGGBB -> RRGGBB 
+                    color_rgb = self.hex_to_rgb(color_hex) # RRGGBB -> (r, g, b)
+
+                    for location in self.Point:
+                            a = polygon.containsPoint(location, QtCore.Qt.WindingFill)
+                            if a == True:
+                                self.location.append(location)
+                    
+                    for location in self.location:
+                        print(location)
+                        self.mask_space[self.cur_idx][location.y()][location.x()] = color_rgb
+
+                    self.wg.lbl_blending_img.addPolygon(polygon, pen, brush)
+
+                    print(self.location)
+
+                    del self.location[:]
+
+
 
         # mousePressEvent에서 클릭을 감지하면 True로 변경
         if self.LRClicked:
@@ -621,13 +658,18 @@ class MyApp(QMainWindow):
                 self.start = self.start + QtCore.QPoint(-10, -44)  # default -13, -57
                 self.end = event.pos()
 
+                self.items.append(self.point_location)
+                del self.point_location[:]
+
+
+
             if self.wg.drawType == 1:  # polygon의 위치를 받고 그것을 self location에 추가함
                 self.polygon = event.pos()
                 print(self.polygon)
-                self.location.append(self.polygon)
+                self.location.append(self.polygon + QtCore.QPoint(-10, -44))
                 print("좌표가 추가되었습니다")
 
-        if event.buttons() == QtCore.Qt.RightButton:  # 질문 : 이게 왜 동시 클릭을 의미?
+        if event.buttons() == QtCore.Qt.RightButton:
             # LRClicked가 False로 되어있다면
             if self.LRClicked == False:
                 self.LRClicked = True  # True(클릭)으로 값 바꾸기
@@ -657,6 +699,9 @@ class MyApp(QMainWindow):
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
+
+            print("################################################################################################################")
+           
             if self.wg.checkbox.isChecked():
                 return None
             
