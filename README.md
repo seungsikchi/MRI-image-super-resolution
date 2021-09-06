@@ -15,3 +15,6 @@ Dicom 파일을 불러오고 GAN으로 학습 하려고 했으나 오류를 해�
 
 5. commit
 labeling tool GUI구현을 위한 기초 작업 앞으로 점점 기능을 구현해나가야함
+
+6. commit
+labeling tool GUI구현과 여러가지 3Drandering, labeling, zoom 등 여러가지 기능 
