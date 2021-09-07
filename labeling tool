@@ -22,14 +22,18 @@ class MyWidget(QWidget):
 
         self.lbl_blending_img = QGraphicsScene()  # 많은 수의 2D 그래픽 항목을 관리하기 위한 표면을 제공
         self.lbl_original_img = QGraphicsScene()
+        self.lbl_transpos_img = QGraphicsScene()
+        self.lbl_transpos2_img = QGraphicsScene()
+        self.lbl_3Drander_img = QGraphicsScene()
 
         self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
-        self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
 
         self.lbl_pos = QLabel()  # 비어있는 라벨? 생성 -> mouseMoveEvent()에서 .setText()를 이용해 계속 갱신
         self.lbl_pos.setAlignment(Qt.AlignLeft)  # 라벨을 AlignLeft에 위치시킨다.
 
         self.draw = QVBoxLayout()  # 오른쪽에 그리는 방법 펜 컬러 버러쉬 컬러 수정하는 창
+
+        self.num = 1
 
         gb = QGroupBox('그리기 종류')
         self.draw.addWidget(gb)
@@ -123,34 +127,75 @@ class MyWidget(QWidget):
         self.btn6.setCheckable(True)
         self.btn6.toggle()
 
+        self.btn7 = QPushButton('&View', self)
+        self.btn7.setCheckable(True)
+        self.btn7.toggle()
+
         # 박스 형태를 그림으로 그리기
         self.hbox1 = QHBoxLayout()  # 행( row) 방향(수평)으로 위젯을 배치할 때 사용하는 레이아웃
         self.hbox2 = QHBoxLayout()
+        self.hbox3 = QHBoxLayout()
 
         # 행을 기준으로 배치하기 때문에 원본, 변환 이미지 위젯을 추가함
-        self.hbox1.addWidget(self.view_1)  # 폼 박스에 원본 이미지 위젯 추가
-        self.hbox1.addWidget(self.view_2)  # 폼 박스에 변환 이미지 위젯 추가
+        self.hbox2.addWidget(self.view_1)  # 폼 박스에 원본 이미지 위젯 추가
+        self.hbox1.addLayout(self.hbox2)
         self.hbox1.addLayout(self.draw)
 
-        self.hbox2.addWidget(self.lbl_pos)  # H박스에 위젯 추가 (previous, next, ImgNum 등)
-        self.hbox2.addStretch(3)
-        self.hbox2.addWidget(self.btn1)
-        self.hbox2.addWidget(self.btn2)
-        self.hbox2.addWidget(self.btn3)
-        self.hbox2.addWidget(self.btn4)
-        self.hbox2.addWidget(self.btn5)
-        self.hbox2.addWidget(self.btn6)
+        self.hbox3.addWidget(self.lbl_pos)  # H박스에 위젯 추가 (previous, next, ImgNum 등)
+        self.hbox3.addStretch(3)
+        self.hbox3.addWidget(self.btn1)
+        self.hbox3.addWidget(self.btn2)
+        self.hbox3.addWidget(self.btn3)
+        self.hbox3.addWidget(self.btn4)
+        self.hbox3.addWidget(self.btn5)
+        self.hbox3.addWidget(self.btn6)
+        self.hbox3.addWidget(self.btn7)
 
-        self.vbox = QVBoxLayout()  # 열(col) 방향(수직)으로 위젯을 배치할 때 사용
-        self.vbox.addLayout(self.hbox1)
-        self.vbox.addLayout(self.hbox2)
+        self.vbox1 = QVBoxLayout()  # 열(col) 방향(수직)으로 위젯을 배치할 때 사용
+        self.vbox1.addLayout(self.hbox1)
+        self.vbox1.addLayout(self.hbox3)
+
+        self.btn7.clicked.connect(self.ViewNum)
 
         # draw레이아웃에 여백 공간 생성
         self.draw.addStretch(1)
 
-        self.setLayout(self.vbox)  # addLayout(self.hbox)를 했기 때문에 setLayout을 vbox로
+        self.setLayout(self.vbox1)  # addLayout(self.hbox)를 했기 때문에 setLayout을 vbox로
         # hbox1안에 위젯들 여백 공간 설정
-        self.vbox.setStretchFactor(self.hbox1, 1)
+        self.vbox1.setStretchFactor(self.hbox1, 1)
+
+    def ViewNum(self):
+        self.num = self.num + 1
+        self.showViewButton()
+    def showViewButton(self):
+        if self.num == 2:
+            self.view_2 = QGraphicsView(self.lbl_original_img)
+            self.hbox2.insertWidget(1, self.view_2)
+        elif self.num == 3:
+            self.vbox2 = QVBoxLayout()
+            self.hbox4 = QHBoxLayout()
+            self.view_3 = QGraphicsView(self.lbl_transpos_img)
+            self.vbox2.addLayout(self.hbox2)     
+            self.vbox2.addLayout(self.hbox4)
+            self.hbox4.addWidget(self.view_3)
+        elif self.num == 4:
+            self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
+            self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
+            self.view_3 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
+        elif self.num == 5:
+            self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
+            self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
+            self.view_3 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
+            self.view_4 = QGraphicsView(self.lbl_transpos2_img) # transpos된 이미지
+
+        elif self.num == 6:
+            self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
+            self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
+            self.view_3 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
+            self.view_4 = QGraphicsView(self.lbl_3Drander_img) # transpos된 이미지
+
+        else:
+            print("지원하지 않는 기능입니다.")
 
     def radioClicked(self):  # 그리는 방법 설정에 뭘로 설정했는지 확인하는 함수
         for i in range(len(self.radiobtns)):
@@ -250,6 +295,7 @@ class MyApp(QMainWindow):
         self.polygon = QPoint()  # 폴리곤의 좌표
         self.label = QLabel()  # QLabel 메서드를 들고옴
         self.Point = []
+        self.stack = []
 
         self.wg = MyWidget()  # MyWidget 클래스를 사용하기 위해서 객체를 생성
         self.setCentralWidget(self.wg)  # QMainWindow 화면에 레이아웃과 위젯을 표시하기 위해사용
@@ -403,11 +449,13 @@ class MyApp(QMainWindow):
                 for i in range(self.EntireImage.shape[1]):
                     for j in range(self.EntireImage.shape[2]):
                         self.Point.append(QPointF(j, i)) 
-
-                self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent  # view_1의 mouseMoveEvent 갱신
-                self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent
-                self.wg.view_1.setMouseTracking(True)  # True일 때는 마우스 이동 감지
-                self.wg.view_2.setMouseTracking(True)  # False일 때는 마우스 클릭시에만 이동 감지
+                
+                if self.wg.num == 1:
+                    self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent  # view_1의 mouseMoveEvent 갱신
+                    self.wg.view_1.setMouseTracking(True)
+                if self.wg.num == 2:
+                    self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent  
+                    self.wg.view_2.setMouseTracking(True)  # False일 때는 마우스 클릭시에만 이동 감지
 
     def openRawAndBin(self):
         self.imagePath, _ = QFileDialog.getOpenFileName(self, 'Open file', './raw')  # 'Open file'은 열리는 위젯의 이름, 세 번째 매개변수는 기본 경로설정
@@ -549,10 +597,14 @@ class MyApp(QMainWindow):
 
             self.wg.lbl_blending_img.addPixmap(image)
             self.wg.lbl_original_img.addPixmap(image)
-            self.wg.view_1.setScene(self.wg.lbl_blending_img)
-            self.wg.view_2.setScene(self.wg.lbl_original_img)
-            self.wg.view_1.show()
-            self.wg.view_2.show()
+            if self.wg.num == 1:
+                self.wg.view_1.setScene(self.wg.lbl_blending_img)
+                self.wg.view_1.show()
+            else:
+                self.wg.view_1.setScene(self.wg.lbl_blending_img)
+                self.wg.view_2.setScene(self.wg.lbl_original_img)
+                self.wg.view_1.show()
+                self.wg.view_2.show()
 
         elif type == 2:
             self.cur_image = zoom_img
