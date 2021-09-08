@@ -18,3 +18,6 @@ labeling tool GUI구현을 위한 기초 작업 앞으로 점점 기능을 구�
 
 6. commit
 labeling tool GUI구현과 여러가지 3Drandering, labeling, zoom 등 여러가지 기능 
+
+7. commit
+GAN Prectice2 GAN알고리즘 연습겸 만들어본 
