@@ -27,6 +27,7 @@ class MyWidget(QWidget):
         self.lbl_3Drander_img = QGraphicsScene()
 
         self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
+        # self.view_1 = setParent(self.view_1*parent)
 
         self.lbl_pos = QLabel()  # 비어있는 라벨? 생성 -> mouseMoveEvent()에서 .setText()를 이용해 계속 갱신
         self.lbl_pos.setAlignment(Qt.AlignLeft)  # 라벨을 AlignLeft에 위치시킨다.
@@ -135,10 +136,14 @@ class MyWidget(QWidget):
         self.hbox1 = QHBoxLayout()  # 행( row) 방향(수평)으로 위젯을 배치할 때 사용하는 레이아웃
         self.hbox2 = QHBoxLayout()
         self.hbox3 = QHBoxLayout()
+        self.vbox2 = QVBoxLayout()
+        self.hbox4 = QHBoxLayout()
 
         # 행을 기준으로 배치하기 때문에 원본, 변환 이미지 위젯을 추가함
-        self.hbox2.addWidget(self.view_1)  # 폼 박스에 원본 이미지 위젯 추가
-        self.hbox1.addLayout(self.hbox2)
+        self.hbox2.addWidget(self.view_1)  # 폼 박스에 원본 이미지 위젯 추가    
+        self.hbox1.addLayout(self.vbox2)
+        self.vbox2.addLayout(self.hbox2)
+        self.vbox2.addLayout(self.hbox4)
         self.hbox1.addLayout(self.draw)
 
         self.hbox3.addWidget(self.lbl_pos)  # H박스에 위젯 추가 (previous, next, ImgNum 등)
@@ -172,21 +177,13 @@ class MyWidget(QWidget):
             self.view_2 = QGraphicsView(self.lbl_original_img)
             self.hbox2.insertWidget(1, self.view_2)
         elif self.num == 3:
-            self.vbox2 = QVBoxLayout()
-            self.hbox4 = QHBoxLayout()
             self.view_3 = QGraphicsView(self.lbl_transpos_img)
-            self.vbox2.addLayout(self.hbox2)     
-            self.vbox2.addLayout(self.hbox4)
-            self.hbox4.addWidget(self.view_3)
+            self.hbox2.insertWidget(2, self.view_3)
         elif self.num == 4:
-            self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
-            self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
-            self.view_3 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
+            self.view_4 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
+            self.hbox2.insertWidget(3, self.view_4)
         elif self.num == 5:
-            self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
-            self.view_2 = QGraphicsView(self.lbl_original_img)  # 변환된 이미지 뷰
-            self.view_3 = QGraphicsView(self.lbl_transpos_img)  # tranpos된 이미지
-            self.view_4 = QGraphicsView(self.lbl_transpos2_img) # transpos된 이미지
+            self.view_4 = QGraphicsView(self.lbl_3Drander_img)  # 원본 이미지
 
         elif self.num == 6:
             self.view_1 = QGraphicsView(self.lbl_blending_img)  # 원본 이미지
@@ -278,6 +275,7 @@ class MyApp(QMainWindow):
 
         self.cur_idx = 0  # Pixmap에 올라갈 이미지를 정하는 idx
         self.cur_image = []  # Pixmap에 올라갈 이미지, 왜 리스트 자료형으로 선언했는지 모르겠다.
+        self.rotation_cur_image = []
         self.EntireImage = []  # Pixmap에 올라갈 이미지들을 가지고있는 Image(폴더?), 같은 사진(중복) .dcm파일들의 개수만큼 idx를 가지고 있으며 한 사진마다 blending 등을 수행하고 ImgNum버튼을 통해 각 사진별로 달라진점 확인 가능?
         self.adjustedImage = []  # 현재 사용X
         self.location = []  # polygon의 위치 좌표
@@ -438,6 +436,7 @@ class MyApp(QMainWindow):
                 print (self.EntireImage.shape)
                 print (type(self.EntireImage))
                 self.EntireImage = self.rotation_volume(self.EntireImage, viewtype='axial')
+                self.rotation_cur_image = self.rotation_volume(self.EntireImage, viewtype = 'sagittal')
 
                 self.NofI, self.Ny, self.Nx = self.EntireImage.shape
                 self.viewUpdate(1)
@@ -587,24 +586,37 @@ class MyApp(QMainWindow):
     def viewUpdate(self, type, zoom_img=None):
         if type == 1:
             self.cur_image = self.EntireImage[self.cur_idx]
+            self.rotation_cur_image = self.rotation_cur_image[self.cur_idx]
+            print(self.rotation_cur_image.shape)
 
             image = self.AdjustPixelRange(self.cur_image, self.window_level, self.window_width)
             image = qimage2ndarray.array2qimage(image)
             image = QPixmap.fromImage(QImage(image))
 
+            image2 = self.AdjustPixelRange(self.rotation_cur_image, self.window_level, self.window_width)
+            image2 = qimage2ndarray.array2qimage(image2)
+            image2 = QPixmap.fromImage(QImage(image2))
+
             self.wg.lbl_blending_img.clear()
             self.wg.lbl_original_img.clear()
+            self.wg.lbl_transpos_img.clear()
 
             self.wg.lbl_blending_img.addPixmap(image)
             self.wg.lbl_original_img.addPixmap(image)
+            self.wg.lbl_transpos_img.addPixmap(image2)
+
             if self.wg.num == 1:
                 self.wg.view_1.setScene(self.wg.lbl_blending_img)
                 self.wg.view_1.show()
-            else:
+            if self.wg.num == 2:
                 self.wg.view_1.setScene(self.wg.lbl_blending_img)
                 self.wg.view_2.setScene(self.wg.lbl_original_img)
                 self.wg.view_1.show()
                 self.wg.view_2.show()
+            if self.wg.num == 3:
+                self.wg.view_1.setScene(self.wg.lbl_blending_img)
+                self.wg.view_2.setScene(self.wg.lbl_original_img)
+                self.wg.view_3.setScene(self.wg.lbl_transpos_img)
 
         elif type == 2:
             self.cur_image = zoom_img
