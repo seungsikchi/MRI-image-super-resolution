@@ -1,60 +1,174 @@
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
-import pydicom
-import matplotlib.pyplot as plt
-import numpy as np
 from tensorflow import keras
-from tensorflow.keras import layers, optimizers
+from tensorflow.keras import layers
+
+from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Reshape, Lambda, Activation, BatchNormalization, LeakyReLU, Dropout, ZeroPadding2D, UpSampling2D
+from keras.layers.merge import _Merge
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers import Adam, RMSprop
+from tensorflow.keras.utils import plot_model
+from tensorflow.keras.initializers import RandomNormal
+
+import numpy as np
+import json
+import os
+import pickle as pkl
+import matplotlib.pyplot as plt
+
+import image_load as ds
+
+class GAN():
+    def __init__(self):
+        self.epoch = 0
+        self.d_losses = []
+        self.g_losses = []
+        self.z_dim = 100
+
+        self._build_generator_model()
+
+        # self._build_discriminator_model()
+        # self._build_generator_model()
+
+        # self._build_adversarial()
+
+    def _build_generator_model(self):
+        generator = tf.keras.Sequential([
+            keras.layers.Dense(4 * 4 * 128, input_shape = [self.z_dim]),
+            keras.layers.BatchNormalization(),
+            keras.layers.LeakyReLU(alpha= 0.2),
+            keras.layers.Reshape((4, 4, 128)),
+            keras.layers.UpSampling2D(size = (2,2)),
+            keras.layers.Conv2DTranspose(64, kernel_size = 5, strides =2, padding = "same", activation = "selu"),
+            keras.layers.BatchNormalization(),
+            keras.layers.UpSampling2D(size = (2,2)),
+            keras.layers.Conv2DTranspose(32, kernel_size = 5, strides =2, padding = "same", activation = "relu"),
+            keras.layers.BatchNormalization(),
+            keras.layers.UpSampling2D(size = (2,2)),
+            keras.layers.Conv2DTranspose(16, kernel_size = 5, strides =2, padding = "same", activation = "relu"),
+            keras.layers.BatchNormalization(),
+             keras.layers.Conv2DTranspose(1, kernel_size = 5, strides =2, padding = "same", activation = "tanh"),
+        ]) # Keras 모델 생성
+        generator.summary()
+        return generator
+
+    def _build_discriminator_model(self):
+
+        model = tf.keras.Sequential()
+
+        discriminator_input = Input(shape = (256, 256, 12))
+        
+        model.add(layers.Conv2D(12, (3, 3), strides=2, padding='same', input_shape=[512, 512, 1])) # input image size
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Conv2D(32, (3, 3), strides=2, padding='same'))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Conv2D(64, (3, 3), strides=2, padding='same'))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Conv2D(128, (3, 3), strides=2, padding='same'))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Conv2D(256, (3, 3), strides=2, padding='same'))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Conv2D(512, (3, 3), strides=2, padding='same'))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        model.add(layers.Flatten())
+        
+        model.add(layers.Dense(512))
+        model.add(layers.ReLU(0.2))
+        model.add(layers.Dropout(0.3))
+
+        discriminator_output = model.add(layers.Dense(1))
+
+        self.discriminator = Model(discriminator_input, discriminator_output)
+        
+        return model
+
+    def set_trainable(self, m, val):
+        m.trainable = val
+        for l in m.layers:
+            l.trainable = val
+
+    def _build_adversarial(self):
+        
+        self.discriminator.compile(optimizers = 'adam', loss = 'binary_crossentropy', metrics = ['accuaray'])
 
 
-window_center = -600
-window_width = 1600
- 
-#DICOM 형식으로 저장된 XRAY사진 읽기 
-dicom_path = '.\\dataset\\CT_1\\1_MOD\\10001.DCM'
-slice = pydicom.read_file(dicom_path)
+        self.set_trainable(self.discriminator, False)
+        model_input = Input(shape=(100), name = 'model_input')
+        model_output = self._build_discriminator_model(self._build_generator_model(model_input))
+        self.model = Model(model_input, model_output)
 
-# Rescale Slope, Window Center와 같은 DICOM 속성을 적용해주지 않으면 contrast 및 brightness 차이가 발생하게 되니 조심해야한다.
-s = 1 # int(slice.RescaleSlope) # 기울기 RescaleSlope는 대부분 1
-b = -1024 # int(slice.RescaleIntercept) # y 절편 간혹 -1024로 설정되어있는 경우가 있다 그러면 안좋음
-image = s * slice.pixel_array + b
-image = image.reshape(1,512,512,1)
+        self.model.compile(optimizers = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+        
+        self.set_trainable(self._build_discriminator_model, True)
 
-batch_size = 1
-
-def build_generator_model():
-    model = tf.keras.Sequential() # Keras 모델 생성
-	
-    model.add(layers.Dense(1024, input_dim=100, use_bias=False))
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
+    def train_discriminator(self, train_x, batch_size, using_generator):
     
-    model.add(layers.Dense(32*32*128, use_bias=False))
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU())
+        valid = np.ones((batch_size,1))
+        fake = np.zeros((batch_size,1))
 
-    # Resahpe (32*32)
-    model.add(layers.Reshape((32, 32, 128)))  
-    model.add(layers.Conv2DTranspose(128, (2, 2), strides=(1, 1), padding='same', use_bias=False))
-    model.add(layers.BatchNormalization()) 
-    model.add(layers.UpSampling2D(size = (2, 2)))
-    model.add(layers.LeakyReLU())
+        if using_generator:
+            true_imgs = next(train_x)[0]
+            if true_imgs.shape[0] != batch_size:
+                true_imgs = next(train_x)[0]
+        else:
+            idx = np.random.randint(0, train_x.shape[0], batch_size)
+            true_imgs = train_x[idx]
+        
+        noise = np.random.normal(0, 1, (batch_size, self.z_dim))
+        gen_imgs = self._build_generator_model.predict(noise)
 
-    # (32*32) -> (64*64)
-    model.add(layers.Conv2DTranspose(64, (2, 2), strides=(2, 2), padding='same', use_bias=False))
-    model.add(layers.BatchNormalization())
-    model.add(layers.UpSampling2D(size = (2, 2)))
-    model.add(layers.LeakyReLU())
+        d_loss_real, d_acc_real =   self._build_discriminator_model.train_on_batch(true_imgs, valid)
+        d_loss_fake, d_acc_fake =   self._build_discriminator_model.train_on_batch(gen_imgs, fake)
+        d_loss =  0.5 * (d_loss_real + d_loss_fake)
+        d_acc = 0.5 * (d_acc_real + d_acc_fake)
+
+        return [d_loss, d_loss_real, d_loss_fake, d_acc, d_acc_real, d_acc_fake]
+
+    def train_generator(self, batch_size):
+        valid = np.ones((batch_size,1))
+        noise = np.random.normal(0, 1, (batch_size, self.z_dim))
+        return self.model.train_on_batch(noise, valid)
+
+    def train(self,train_x, batch_size, epochs, using_generator = False):
+
+        for i in range(self.epoch, self.epoch + epochs):
+
+            d = self.train_discriminator(train_x, batch_size, using_generator)
+            g = self.train_generator(batch_size)
+
+            print ("%d [D loss: (%.3f)(R %.3f, F %.3f)] [D acc: (%.3f)(%.3f, %.3f)] [G loss: %.3f] [G acc: %.3f]" % (epoch, d[0], d[1], d[2], d[3], d[4], d[5], g[0], g[1]))
+
+            self.d_losses.append(d)
+            self.g_losses.append(g)
+
+            self.epoch += 1
+
     
-    # (256*256) -> (512*512)
-    model.add(layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding='same', activation='tanh'))
-    assert model.output_shape == (None, 512, 512, 1)
-    return model
 
+path = '.\\image\\dataset1\\'
+ds = ds.dataSet(path)
+train_x = ds.load_data(0.3)
+Batch_size = 10
+Epochs = 1000
 
-generator = build_generator_model()
-generator.summary()
+gan = GAN()
+
+print(train_x.shape)
+
 
 noise = tf.random.normal([1,100])
 generated_image = generator(noise, training = False)
@@ -62,113 +176,8 @@ generated_image = generator(noise, training = False)
 plt.imshow(generated_image[0, :, :, 0], cmap = 'gray')
 plt.show()
 
-def build_discriminator_model():
+gan.train(train_x, Batch_size, Epochs)
 
-    model = tf.keras.Sequential()
+
+
     
-    model.add(layers.Conv2D(12, (3, 3), strides=2, padding='same', input_shape=[512, 512, 1])) # input image size
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-
-    model.add(layers.Conv2D(32, (3, 3), strides=2, padding='same'))
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-
-    model.add(layers.Conv2D(64, (3, 3), strides=2, padding='same'))
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-
-    model.add(layers.Conv2D(128, (3, 3), strides=2, padding='same'))
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-
-    model.add(layers.Flatten())
-    
-    model.add(layers.Dense(256))
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-    
-    model.add(layers.Dense(512))
-    model.add(layers.LeakyReLU(0.2))
-    model.add(layers.Dropout(0.3))
-
-    model.add(layers.Dense(1))
-    
-    return model
-
-discriminator = build_discriminator_model()
-discriminator.summary()
-
-gan = keras.models.Sequential([generator, discriminator])
-
-cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits = True)#cross_entropy를 크로스 엔트로피 손실함수로 지정
-
-def discriminator_loss(real_output, fake_output):#판별자의 손실함수를 설정
-  real_loss = cross_entropy(tf.ones_like(real_output), real_output)#정답의 손실함수
-  fake_loss = cross_entropy(tf.zeros_like(fake_output), fake_output)#가짜의 손실함수
-  total_loss = real_loss + fake_loss #정답과 가짜의 손실함를 합침
-  return total_loss  #합친 손실함수값을 출력
-
-def generator_loss(fake_output):
-  return cross_entropy(tf.ones_like(fake_output), fake_output)#위에서 만든 가짜 손실함수의 값을 출력
-
-generator_optimizer = tf.keras.optimizers.Adam(1e-4)#생성자 활섬화 함수 adam으로 설정
-discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)#판별자 활성화 함수 adam으로 설정
-
-cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits = True)
-
-batch_size = 1
-epochs = 50
-noise_dim = 100
-
-def train_step(images):
-    noise = tf.random.normal([batch_size, noise_dim])
-
-    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape: #gradientTape에 학습이 어떻게 되는지 저장
-      generated_images = generator(noise, training=True)#생성자로 노이즈 이미지 생성
-
-      images = images.reshape(1, 512, 512, 1)  
-      real_output = discriminator(images, training=True)#정답 이미지를 판별자에 넣고 나온값을 real_output에 넣음
-      fake_output = discriminator(generated_images, training=True)#생성자로 만들어진 이미지를 판별자에 넣고 나온값을 fake에 넣음
-
-      gen_loss = generator_loss(fake_output)#생성자의 오차값을 측정해서 생성자 오차값에 넣음
-      disc_loss = discriminator_loss(real_output, fake_output)#판별자의 오차값을 측정해서 판별자 오차값에 넣음
-      d_loss = 0.5*np.add(gen_loss, disc_loss)
-    gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)#생성자의 경사하강법 경사를 기록함
-    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)#판별자의 경사하강법 경사를 기록함
-
-    generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
-    discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))#경사가 나온걸 optimizer에 넣어서 역전파법실행
-    print("gen_loss: %f"%d_loss[0])
-    print("disc_loss: %d"%disc_loss)
-
-test_noise = tf.random.normal([100, noise_dim]) #학습 시각화를 위한 테스트 노이즈
-
-def show_generated_images(epoch):#이미지를 출려갛는 함수
-    image = generator.predict(test_noise)
-    image = 0.5 * image + 0.5
-
-    plt.figure(figsize=(11, 11))
-
-    i = 1
-    for img in image:
-        image = img.reshape(512, 512)
-        plt.subplot(10, 10, i)
-        plt.imshow(img, cmap = 'gray')
-        plt.axis('off')
-        i += 1
-        
-    plt.show()
-
-def train(image, epochs):
-    for epochs in range(epochs):# 전체 데이터 학습 반복 횟수(300)
-
-        for image_batch in image: #batch 학습(64)
-            train_step(image_batch)
-
-        print("%s epochs trained" %epochs)
-
-        if epochs % 5 == 0:
-            show_generated_images(epochs)
-
-train(image, epochs)
