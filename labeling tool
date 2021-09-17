@@ -35,7 +35,6 @@ class MyWidget(QWidget):
 
         self.draw = QVBoxLayout()  # 오른쪽에 그리는 방법 펜 컬러 버러쉬 컬러 수정하는 창
 
-        self.num = 1
         self.number = 0
 
         view_choice = QGroupBox('view 설정')        
@@ -334,7 +333,7 @@ class MyApp(QMainWindow):
 
     # btn1(uodo)가 클릭 되었을 때
     def undoButton(self):
-        for i in range(10):
+        for i in range(20):
             self.stack.pop()
 
         self.wg.lbl_blending_img.clear()
@@ -433,6 +432,7 @@ class MyApp(QMainWindow):
                 
                 print (self.EntireImage.shape)
                 print (type(self.EntireImage))
+
                 self.EntireImage = self.rotation_volume(self.EntireImage, viewtype='axial')
                 self.rotation_sagittal = self.rotation_volume(self.EntireImage, viewtype = 'sagittal')
                 self.rotation_coronal = self.rotation_volume(self.EntireImage, viewtype='coronal')
@@ -448,11 +448,9 @@ class MyApp(QMainWindow):
                     for j in range(self.EntireImage.shape[2]):
                         self.Point.append(QPointF(j, i)) 
                 
-                if self.wg.num == 1:
                     self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent  # view_1의 mouseMoveEvent 갱신
-                    self.wg.view_1.setMouseTracking(True)
-                if self.wg.num == 2:
                     self.wg.view_2.mouseMoveEvent = self.mouseMoveEvent  
+                    self.wg.view_1.setMouseTracking(True)
                     self.wg.view_2.setMouseTracking(True)  # False일 때는 마우스 클릭시에만 이동 감지
 
     def openRawAndBin(self):
@@ -484,6 +482,7 @@ class MyApp(QMainWindow):
                 self.rotation_coronal = self.rotation_volume(self.EntireImage, viewtype='coronal')
 
                 self.NofI, self.Ny, self.Nx = self.EntireImage.shape
+                print(self.EntireImage.shape)
                 self.viewUpdate(1)
 
                 self.wg.view_1.mouseMoveEvent = self.mouseMoveEvent
@@ -616,19 +615,6 @@ class MyApp(QMainWindow):
             self.wg.lbl_original_img.addPixmap(img_blending)
             self.wg.lbl_transpos_sagittal.addPixmap(img_sagittal)
             self.wg.lbl_transpos_coronal.addPixmap(img_coronal)
-
-            if self.wg.num == 1:
-                self.wg.view_1.setScene(self.wg.lbl_blending_img)
-                self.wg.view_1.show()
-            if self.wg.num == 2:
-                self.wg.view_1.setScene(self.wg.lbl_blending_img)
-                self.wg.view_2.setScene(self.wg.lbl_original_img)
-                self.wg.view_1.show()
-                self.wg.view_2.show()
-            if self.wg.num == 3:
-                self.wg.view_1.setScene(self.wg.lbl_blending_img)
-                self.wg.view_2.setScene(self.wg.lbl_original_img)
-                self.wg.view_3.setScene(self.wg.lbl_transpos_img)
 
         elif type == 2:
             self.cur_image = zoom_img
