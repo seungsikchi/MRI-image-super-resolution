@@ -1,4 +1,4 @@
-# cannon-project
+# MRI-image-super-resolution
 
 1. commit
 CT사진 DICOM불러오기
