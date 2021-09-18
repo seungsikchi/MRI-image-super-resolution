@@ -28,6 +28,8 @@ class dataSet():
 
         for localPath in result:
             img = self.imageread(localPath)
+            x, y= img.shape
+            img.reshape(x, y, 1)
             self.x.append(img) 
         return self.x
     
@@ -65,8 +67,9 @@ class dataSet():
         x = shuffle(x)
         return x
 
-    def normalization(self,x , window_center = -600, window_width = 1600):
-        x = np.clip(x, window_center - (window_width / 2), window_center + (window_width / 2))
+    def normalization(self,x):
+        # x = (x - np.min(x)) / (np.max(x) - np.min(x))
+        x = x *255.0
         return x
     
     def load_data(self,ratio):
@@ -74,11 +77,7 @@ class dataSet():
         # self.resizeAll(self.x, dim) # numpy화 되어 있음
         self.x = self.shuffleData(self.x)
         self.split_Dataset(ratio)
+        print(self.train_x)
         self.train_x = self.normalization(self.train_x)
         
         return self.train_x
-
-
-path = '.\\dataset\\Canon\\CT_1\\'
-ds = dataSet(path)
-train_x = ds.load_data(0.3)
