@@ -186,7 +186,7 @@ class MyWidget(QWidget):
                     self.hbox4.insertWidget(2, self.view_3)
                     self.view_4 = QGraphicsView(self.lbl_transpos_coronal)  # tranpos된 이미지
                     self.hbox4.insertWidget(3, self.view_4)
-                    self.number = self.number = 1
+                    self.number = 1
 
                 elif self.number == 1:
                     print("지원하는 기능은 2x2까지 입니다 1x2로 바꿔주세요.")
@@ -289,6 +289,7 @@ class MyApp(QMainWindow):
         self.end = QPointF()  # 그리기 끝난 좌표점
         self.polygon = QPoint()  # 폴리곤의 좌표
         self.label = QLabel()  # QLabel 메서드를 들고옴
+        self.view_size = QSize(484, 519)
         self.Point = []
         self.stack = []
 
@@ -728,6 +729,10 @@ class MyApp(QMainWindow):
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
             if self.wg.drawType == 0:
+                size = self.wg.view_1.size()
+                print(size)
+                size = size.split()
+                QtCore.QRect.setSize(self.view_size)
                 self.start = event.pos()
                 self.start = self.start + QtCore.QPoint(-10, -44)  # default -13, -57
                 self.end = event.pos()
