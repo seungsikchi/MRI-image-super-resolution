@@ -1,23 +1,11 @@
 # MRI-image-super-resolution
 
-1. commit
-CT사진 DICOM불러오기
-gz 3D파일 불러오고 나타내기
+labeling tool : MRI데이터가 3차원 데이터기 때문에 라벨링 툴을 따류 만들었다. 
 
-2. commit
-gz파일을 3D파일을 불러낼수가 없어서 vtk로 Dicom파일을 3D로 부르려고 시도는 했는데 실패
+image Read : MRI데이터를 불러오는 코드 GAN에 import시켜서 사용한다.
 
-3. commit
-vtk로 Dicom파일을 3D 불러오기를 성공
+Voxel : 멘토링 하면서 멘토분이 주신 코드 labeling tool에서 3차원 공간을 만들거나 수정하는데 사용 labeling tool에 import 시켜서 사용
 
-4. commit
-Dicom 파일을 불러오고 GAN으로 학습 하려고 했으나 오류를 해결하지 못해서 학습을 못시킴 차후 수정필요
+GAN : MRI데이터를 GAN알고리즘에 넣어서 새로 이미지를 만들때 사용 여기서 생성한 데이터를 Super Resolution에 넣어서 화질을 개선한다.
 
-5. commit
-labeling tool GUI구현을 위한 기초 작업 앞으로 점점 기능을 구현해나가야함
-
-6. commit
-labeling tool GUI구현과 여러가지 3Drandering, labeling, zoom 등 여러가지 기능 
-
-7. commit
-GAN Prectice2 GAN알고리즘 연습겸 만들어본 
+image : Dicom파일을 불러오거나 vtk를 사용해서 3D Randering을 하는 코드
