@@ -15,8 +15,8 @@ from glob import glob
 
 from keras.applications import vgg19
 from keras import backend as K
-from keras.utils import to_categorical
-import pydicom
+from tensorflow.keras.utils import to_categorical
+import voxel
 import matplotlib.pyplot as plt
 import pdb
 
@@ -26,17 +26,19 @@ class DataLoader():
 
         self.load_data()
 
-    def load_data(self,batch_size=1, is_testing=False):
-        path = glob('./image/dataset1/*')
+
+    def load_data(self,batch_size=1):
+        path = glob('./raw/EPI/FLA/001_EPI_FLA.raw')
 
         batch_images = np.random.choice(path, size=batch_size)
 
         imgs = []
         for img_path in batch_images:
             img = self.imread(img_path)
-            plt.imshow(img, cmap = "gray")
+            print(type(img))
+            print(img.shape)
+            plt.imshow(img[0], cmap = "gray")
             plt.show()
-            img = img.reshape(512,512,1)
             # if not is_testing:
             #     img = scipy.misc.imresize(img, self.img_res)
 
@@ -51,8 +53,8 @@ class DataLoader():
         return imgs
 
     def load_batch(self, batch_size=1, is_testing=False):
-        path_A = glob('./image/dataset1/*')
-        path_B = glob('./image/dataset1/*')
+        path_A = glob('./raw/EPI/FLA/001_EPI_FLA.raw')
+        path_B = glob('./raw/EPI/FLA/001_EPI_FLA.raw')
 
         self.n_batches = int(min(len(path_A), len(path_B)) / batch_size)
         total_samples = self.n_batches * batch_size
@@ -70,8 +72,8 @@ class DataLoader():
                 img_A = self.imread(img_A)
                 img_B = self.imread(img_B)
 
-                img_A = scipy.misc.imresize(img_A, self.img_res)
-                img_B = scipy.misc.imresize(img_B, self.img_res)
+                # img_A = scipy.misc.imresize(img_A, self.img_res)
+                # img_B = scipy.misc.imresize(img_B, self.img_res)
 
                 if not is_testing and np.random.random() > 0.5:
                         img_A = np.fliplr(img_A)
@@ -92,10 +94,9 @@ class DataLoader():
         return img[np.newaxis, :, :, :]
 
     def imread(self, path):
-        slice = pydicom.read_file(path)
-        s = 1 
-        b = -1024 
-        x = s * slice.pixel_array + b
+        vx = voxel.PyVoxel()
+        x = vx.ReadFromRaw(path)
+        x = vx.m_Voxel
         return x
 
 
