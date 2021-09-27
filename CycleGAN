@@ -10,10 +10,10 @@ from keras.layers.merge import add
 from layers import ReflectionPadding2D
 from keras.models import Sequential, Model
 from keras.initializers import RandomNormal
-from keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam
 from keras import backend as K
 
-from keras.utils import plot_model
+from tensorflow.keras.utils import plot_model
 
 import datetime
 import matplotlib.pyplot as plt
@@ -39,8 +39,6 @@ class CycleGAN():
         , disc_n_filters
         , buffer_max_length = 50
         ):
-
-        # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
         self.input_dim = input_dim
         self.learning_rate = learning_rate
@@ -102,7 +100,6 @@ class CycleGAN():
 
         # Input images from both domains
         img_A = Input(shape=self.img_shape)
-        
         img_B = Input(shape=self.img_shape)
 
         # Translate images to the other domain
@@ -176,71 +173,6 @@ class CycleGAN():
         return Model(img, output_img)
 
 
-    def build_generator_resnet(self):
-
-        def conv7s1(layer_input, filters, final):
-            y = ReflectionPadding2D(padding =(3,3))(layer_input)
-            y = Conv2D(filters, kernel_size=(7,7), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            if final:
-                y = Activation('tanh')(y)
-            else:
-                y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-                y = Activation('relu')(y)
-            return y
-
-        def downsample(layer_input,filters):
-            y = Conv2D(filters, kernel_size=(3,3), strides=2, padding='same', kernel_initializer = self.weight_init)(layer_input)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-            y = Activation('relu')(y)
-            return y
-
-        def residual(layer_input, filters):
-            shortcut = layer_input
-            y = ReflectionPadding2D(padding =(1,1))(layer_input)
-            y = Conv2D(filters, kernel_size=(3, 3), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-            y = Activation('relu')(y)
-            
-            y = ReflectionPadding2D(padding =(1,1))(y)
-            y = Conv2D(filters, kernel_size=(3, 3), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-
-            return add([shortcut, y])
-
-        def upsample(layer_input,filters):
-            y = Conv2DTranspose(filters, kernel_size=(3, 3), strides=2, padding='same', kernel_initializer = self.weight_init)(layer_input)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-            y = Activation('relu')(y)
-    
-            return y
-
-
-        # Image input
-        img = Input(shape=self.img_shape)
-
-        y = img
-
-        y = conv7s1(y, self.gen_n_filters, False)
-        y = downsample(y, self.gen_n_filters * 2)
-        y = downsample(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = upsample(y, self.gen_n_filters * 2)
-        y = upsample(y, self.gen_n_filters)
-        y = conv7s1(y, 3, True)
-        output = y
-
-   
-        return Model(img, output)
-
-
     def build_discriminator(self):
 
         def conv4(layer_input,filters, stride = 2, norm=True):
@@ -269,7 +201,7 @@ class CycleGAN():
         # Translate images to opposite domain
         fake_B = self.g_AB.predict(imgs_A)
         fake_A = self.g_BA.predict(imgs_B)
-        
+
         self.buffer_B.append(fake_B)
         self.buffer_A.append(fake_A)
 
@@ -307,23 +239,41 @@ class CycleGAN():
 
 
     def train(self, data_loader, run_folder, epochs, test_A_file, test_B_file, batch_size=1, sample_interval=50):
+        print("B")
 
         start_time = datetime.datetime.now()
 
-        # Adversarial loss ground truths
-        valid = np.ones((batch_size,) + self.disc_patch)
-        fake = np.zeros((batch_size,) + self.disc_patch)
+        batch_size = 1 #일반적으로 CycleGAN의 batch 사이즈는 1임
+        patch = int(self.img_rows/2**4)
+        self.disc_patch = (patch, patch, 1)
+
+        valid = np.ones((batch_size,) + self.disc_patch)  #진짜 이미지들은 타깃이 1
+        fake = np.ones((batch_size,) + self.disc_patch)  #가짜 이미지들은 타깃이 0
 
         for epoch in range(self.epoch, epochs):
-            for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch()):
-                d_loss = self.train_discriminators(imgs_A, imgs_B, valid, fake)
-                g_loss = self.train_generators(imgs_A, imgs_B, valid)
+            for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch(batch_size)):
+                print("C")
+                #생성자를 사용하여 가짜 이미지 배치 생성
+                fake_B = self.g_AB.predict(imgs_A)
+                fake_A = self.g_BA.predict(imgs_B)
+                
+                #가짜 이미지와 진짜 이미지 배치로 각 판별자를 훈련
+                dA_loss_real = self.d_A.train_on_batch(imgs_A, valid)
+                dA_loss_fake = self.d_A.train_on_batch(fake_A, fake)
+                dA_loss = 0.5 * np.add(dA_loss_real, dA_loss_fake)
+                
+                dB_loss_real = self.d_B.train_on_batch(imgs_B, valid)
+                dB_loss_fake = self.d_B.train_on_batch(fake_B, fake)
+                dB_loss = 0.5 * np.add(dB_loss_real, dB_loss_fake)
 
                 elapsed_time = datetime.datetime.now() - start_time
+                
+                d_loss = 0.5 * np.add(dA_loss, dB_loss)
+                
+                #생성자는 앞서 컴파일된 결합 모델을 통해 동시에 훈련됨. 6개의 출력은 컴파일 단계에서 정의한 6개의 손실함수에 대응
+                g_loss = self.combined.train_on_batch([imgs_A, imgs_B], [valid, valid, imgs_A, imgs_B, imgs_A, imgs_B])
 
-                # Plot the progress
-                if batch_i % 100 == 0:
-                    print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s " \
+                print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s " \
                         % ( self.epoch, epochs,
                             batch_i, data_loader.n_batches,
                             d_loss[0], 100*d_loss[7],
@@ -332,9 +282,7 @@ class CycleGAN():
                             np.sum(g_loss[3:5]),
                             np.sum(g_loss[5:7]),
                             elapsed_time))
-
-                self.d_losses.append(d_loss)
-                self.g_losses.append(g_loss)
+                
 
                 # If at save interval => save generated image samples
                 if batch_i % sample_interval == 0:
@@ -356,8 +304,8 @@ class CycleGAN():
                 imgs_A = data_loader.load_data(domain="A", batch_size=1, is_testing=True)
                 imgs_B = data_loader.load_data(domain="B", batch_size=1, is_testing=True)
             else:
-                imgs_A = data_loader.load_img('./image/dataset1/%s' % (test_A_file))
-                imgs_B = data_loader.load_img('./image/dataset1/%s' % (test_B_file))
+                imgs_A = data_loader.load_img('./raw/EPI/FLA/001_EPI_FLA.raw')
+                imgs_B = data_loader.load_img('./raw/EPI/FLA/002_EPI_FLA.raw')
 
             # Translate images to the other domain
             fake_B = self.g_AB.predict(imgs_A)
@@ -369,7 +317,6 @@ class CycleGAN():
             # ID the images
             id_A = self.g_BA.predict(imgs_A)
             id_B = self.g_AB.predict(imgs_B)
-
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
 
