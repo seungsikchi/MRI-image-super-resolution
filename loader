@@ -18,7 +18,7 @@ from keras import backend as K
 from tensorflow.keras.utils import to_categorical
 import voxel
 import matplotlib.pyplot as plt
-import pdb
+import PIL 
 
 class DataLoader():
     def __init__(self,img_res=(512, 512)):
@@ -69,6 +69,8 @@ class DataLoader():
                 imgs_A = self.imread(imgs_A)
                 imgs_B = self.imread(imgs_B)
 
+                print(imgs_A)
+
             yield imgs_A, imgs_B
 
     def load_img(self, path):
@@ -79,11 +81,26 @@ class DataLoader():
     def imread(self, path):
         vx = voxel.PyVoxel()
         x = vx.ReadFromRaw(path)
+        x = vx.m_Voxel
+        x = self.resize(x, 512)
         x = vx.NormalizeMM()
         x = vx.m_Voxel
 
         return x
 
+    def resize(self, x, dim):
+        resize_imges = []
+        channel = x.shape[0]
+        for i in range(channel):
+            image_raw = PIL.Image.frombytes('RGBA', (256,256), x, 'raw')
+            image_raw.show()
+            resize_img = image_raw[i].resize((int(dim), int(dim)))
+            # plt.imshow(resize_img, cmap='gray')
+            # plt.show()
+            # print(resize_img)
+            resize_imges.append(resize_img)
+
+        return resize_imges
 
 
 
