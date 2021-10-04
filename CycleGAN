@@ -87,8 +87,11 @@ class CycleGAN():
 
         # Build the generators
         if self.generator_type == 'unet':
-            self.g_AB = self.build_generator_Resnet()
-            self.g_BA = self.build_generator_Resnet()
+            self.g_AB = self.build_generator_resnet()
+            self.g_BA = self.build_generator_resnet()
+
+        # self.g_AB.summary()
+        # self.g_BA.summary()
 
         # For the combined model we will only train the generators
         self.d_A.trainable = False
@@ -101,6 +104,7 @@ class CycleGAN():
         # Translate images to the other domain
         fake_B = self.g_AB(img_A)
         fake_A = self.g_BA(img_B)
+
         # Translate images back to original domain
         reconstr_A = self.g_BA(fake_B)
         reconstr_B = self.g_AB(fake_A)
@@ -129,8 +133,8 @@ class CycleGAN():
         self.d_B.trainable = True
     
 
-    def build_generator_Resnet(self):
-
+    def build_generator_resnet(self):
+    
         def conv7s1(layer_input, filters, final):
             y = ReflectionPadding2D(padding =(3,3))(layer_input)
             y = Conv2D(filters, kernel_size=(7,7), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
@@ -187,11 +191,12 @@ class CycleGAN():
         y = residual(y, self.gen_n_filters * 4)
         y = upsample(y, self.gen_n_filters * 2)
         y = upsample(y, self.gen_n_filters)
-        y = conv7s1(y, 3, True)
+        y = conv7s1(y, 1, True)
         output = y
 
    
         return Model(img, output)
+
 
 
     def build_discriminator(self):
@@ -272,16 +277,17 @@ class CycleGAN():
         valid = np.ones((batch_size,) + self.disc_patch)  #진짜 이미지들은 타깃이 1
         fake = np.zeros((batch_size,) + self.disc_patch)  #가짜 이미지들은 타깃이 0
 
-        # self.g_AB.summary()
-        # self.g_BA.summary()
-        # self.d_A.summary()
-        # self.d_B.summary()
+        self.g_AB.summary()
+        self.g_BA.summary()
+        self.d_A.summary()
+        self.d_B.summary()
 
         for epoch in range(self.epoch, epochs):
             for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch(batch_size)):
+                print(imgs_A.shape)
 
-                imgs_A = imgs_A.reshape(28,256,256,1)
-                imgs_B = imgs_B.reshape(28,256,256,1)
+                imgs_A = imgs_A.reshape(20,512,512,1)
+                imgs_B = imgs_B.reshape(20,512,512,1)
                 
                 imgs_A = imgs_A[batch_i]
                 imgs_B = imgs_B[batch_i]
@@ -326,7 +332,7 @@ class CycleGAN():
                     self.sample_images(data_loader, batch_i, run_folder)
                     self.combined.save_weights(os.path.join(run_folder, 'weights/weights-%d.h5' % (self.epoch)))
                     self.combined.save_weights(os.path.join(run_folder, 'weights/weights.h5'))
-                    self.save_model(run_folder)
+                    # self.save_model(run_folder)
 
                 
             self.epoch += 1
@@ -342,11 +348,11 @@ class CycleGAN():
                 imgs_B = data_loader.load_data(batch_size=1, is_testing=True)
             else:
                 imgs_A = data_loader.load_img('./data/EPI//010_EPI_FLA.raw')
-                imgs_B = data_loader.load_img('./data/EPI//009_EPI_FLA.raw')
+                imgs_B = data_loader.load_img('./data/EPI//001_Routine_FLA.raw')
 
 
-            imgs_A = imgs_A.reshape(28,256,256,1)
-            imgs_B = imgs_B.reshape(28,256,256,1)
+            imgs_A = imgs_A.reshape(20,512,512,1)
+            imgs_B = imgs_B.reshape(20,512,512,1)
                 
             imgs_A = imgs_A[batch_i]
             imgs_B = imgs_B[batch_i]
@@ -373,7 +379,7 @@ class CycleGAN():
             gen_imgs = np.clip(gen_imgs, 0, 1)
 
             vx = voxel.PyVoxel()
-            gen_imgs = vx.ReverseNormalizeMM(gen_imgs)
+            gen_imgs = vx.DeNormalizeMM(gen_imgs)
 
             titles = ['Original', 'Translated', 'Reconstructed', 'ID']
             fig, axs = plt.subplots(r, c, figsize=(25,12.5))
@@ -414,12 +420,12 @@ class CycleGAN():
         self.plot_model(folder)
 
 
-    def save_model(self, run_folder):
-        self.combined.save(os.path.join(run_folder, 'model.h5')  )
-        self.d_A.save(os.path.join(run_folder, 'd_A.h5') )
-        self.d_B.save(os.path.join(run_folder, 'd_B.h5') )
-        self.g_BA.save(os.path.join(run_folder, 'g_BA.h5')  )
-        self.g_AB.save(os.path.join(run_folder, 'g_AB.h5') )
+    # def save_model(self, run_folder):
+    #     self.combined.save(os.path.join(run_folder, 'model.h5')  )  
+    #     self.d_A.save(os.path.join(run_folder, 'd_A.h5') )
+    #     self.d_B.save(os.path.join(run_folder, 'd_B.h5') )
+    #     self.g_BA.save(os.path.join(run_folder, 'g_BA.h5')  )
+    #     self.g_AB.save(os.path.join(run_folder, 'g_AB.h5') )
 
     def load_weights(self, filepath):
         self.combined.load_weights(filepath)
