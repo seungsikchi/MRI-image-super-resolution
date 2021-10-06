@@ -57,6 +57,7 @@ class CycleGAN():
 
         self.d_losses = []
         self.g_losses = []
+        self.raw = []
         self.epoch = 0
 
         self.buffer_A = deque(maxlen = self.buffer_max_length)
@@ -67,6 +68,7 @@ class CycleGAN():
         self.disc_patch = (patch, patch, 1)
 
         self.weight_init = RandomNormal(mean=0., stddev=0.02)
+        self.vx = voxel.PyVoxel()
 
         self.compile_models()
 
@@ -286,8 +288,8 @@ class CycleGAN():
             for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch(batch_size)):
                 print(imgs_A.shape)
 
-                imgs_A = imgs_A.reshape(20,512,512,1)
-                imgs_B = imgs_B.reshape(20,512,512,1)
+                imgs_A = imgs_A.reshape(20,256,256,1)
+                imgs_B = imgs_B.reshape(20,256,256,1)
                 
                 imgs_A = imgs_A[batch_i]
                 imgs_B = imgs_B[batch_i]
@@ -336,6 +338,10 @@ class CycleGAN():
 
                 
             self.epoch += 1
+            self.vx.NumpyArraytoVoxel(self.raw)
+            self.vx.WriteToRaw(path)
+            del self.raw[:]
+            print(self.raw.shape)
 
     def sample_images(self, data_loader, batch_i, run_folder):
         
@@ -347,12 +353,12 @@ class CycleGAN():
                 imgs_A = data_loader.load_data(batch_size=1, is_testing=True)
                 imgs_B = data_loader.load_data(batch_size=1, is_testing=True)
             else:
-                imgs_A = data_loader.load_img('./data/EPI//010_EPI_FLA.raw')
-                imgs_B = data_loader.load_img('./data/EPI//001_Routine_FLA.raw')
+                imgs_A = data_loader.load_img('./data/EPI/010_EPI_FLA.raw')
+                imgs_B = data_loader.load_img('./data/Routine/001_Routine_FLA.raw')
 
 
-            imgs_A = imgs_A.reshape(20,512,512,1)
-            imgs_B = imgs_B.reshape(20,512,512,1)
+            imgs_A = imgs_A.reshape(20,256,256,1)
+            imgs_B = imgs_B.reshape(20,256,256,1)
                 
             imgs_A = imgs_A[batch_i]
             imgs_B = imgs_B[batch_i]
@@ -372,14 +378,14 @@ class CycleGAN():
             id_B = self.g_AB.predict(imgs_B)
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
+            self.raw = np.append(fake_B)
 
-            print(gen_imgs.shape)
+            print("#######################################!!!")
+            print(self.raw.shape)
             # Rescale images 0 - 1
 
             gen_imgs = np.clip(gen_imgs, 0, 1)
-
-            vx = voxel.PyVoxel()
-            gen_imgs = vx.DeNormalizeMM(gen_imgs)
+            gen_imgs = self.vx.DeNormalizeMM(gen_imgs)
 
             titles = ['Original', 'Translated', 'Reconstructed', 'ID']
             fig, axs = plt.subplots(r, c, figsize=(25,12.5))
