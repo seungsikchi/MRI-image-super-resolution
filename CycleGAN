@@ -338,10 +338,13 @@ class CycleGAN():
 
                 
             self.epoch += 1
-            self.vx.NumpyArraytoVoxel(self.raw)
-            self.vx.WriteToRaw(path)
-            del self.raw[:]
-            print(self.raw.shape)
+
+            if self.epoch % 10 == 0:
+                self.vx.NumpyArraytoVoxel(self.raw)
+                self.vx.WriteToRaw("./run/Brain/0001_mri_512/raw/Epochs%d.raw"%self.epoch)
+                del self.raw[:]
+                print(self.raw.shape)
+
 
     def sample_images(self, data_loader, batch_i, run_folder):
         
@@ -378,7 +381,11 @@ class CycleGAN():
             id_B = self.g_AB.predict(imgs_B)
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
-            self.raw = np.append(fake_B)
+            print(fake_B.shape)
+            fake_B = self.vx.DeNormalizeMM(fake_B)
+            fake_B = np.squeeze(fake_B, axis= 3)
+            print(fake_B.shape)
+            self.raw = np.insert(fake_B)
 
             print("#######################################!!!")
             print(self.raw.shape)
