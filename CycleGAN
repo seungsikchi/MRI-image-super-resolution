@@ -339,7 +339,8 @@ class CycleGAN():
                 
             self.epoch += 1
 
-            if self.epoch % 10 == 0:
+            if self.epoch % 1 == 0:
+                self.raw.reshape(20, 256, 256)
                 self.vx.NumpyArraytoVoxel(self.raw)
                 self.vx.WriteToRaw("./run/Brain/0001_mri_512/raw/Epochs%d.raw"%self.epoch)
                 del self.raw[:]
@@ -385,10 +386,13 @@ class CycleGAN():
             fake_B = self.vx.DeNormalizeMM(fake_B)
             fake_B = np.squeeze(fake_B, axis= 3)
             print(fake_B.shape)
-            self.raw = np.insert(fake_B)
-
-            print("#######################################!!!")
+            self.raw = np.append(self.raw, fake_B)
             print(self.raw.shape)
+            self.raw = self.raw.reshape(1,256,256)
+            
+            plt.imshow(self.raw)
+            plt.show()
+            print("#######################################!!!")
             # Rescale images 0 - 1
 
             gen_imgs = np.clip(gen_imgs, 0, 1)
