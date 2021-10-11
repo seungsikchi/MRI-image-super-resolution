@@ -17,6 +17,7 @@ from tensorflow.keras.utils import plot_model
 import datetime
 import matplotlib.pyplot as plt
 import voxel 
+import tensorflow as tf
 
 import numpy as np
 import os
@@ -183,17 +184,18 @@ class CycleGAN():
         y = conv7s1(y, self.gen_n_filters, False)
         y = downsample(y, self.gen_n_filters * 2)
         y = downsample(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = residual(y, self.gen_n_filters * 4)
-        y = upsample(y, self.gen_n_filters * 2)
-        y = upsample(y, self.gen_n_filters)
+        b1 = residual(y, self.gen_n_filters * 4)
+        b2 = residual(b1, self.gen_n_filters * 4)
+        b3 = residual(b2, self.gen_n_filters * 4)
+        b4 = residual(b3, self.gen_n_filters * 4)
+        b5 = residual(b4, self.gen_n_filters * 4)
+        b6 = residual(b5, self.gen_n_filters * 4)
+        b7 = residual(b6, self.gen_n_filters * 4)
+        b8 = residual(b7, self.gen_n_filters * 4)
+        b9 = residual(b8, self.gen_n_filters * 4)
+        b10 = upsample(b9, self.gen_n_filters * 2)
+        b11 = tf.keras.layers.Concatenate()([b1, b2, b3, b4, b5, b6, b7, b8, b9, b10])
+        y = upsample(b11, self.gen_n_filters)
         y = conv7s1(y, 1, True)
         output = y
 
@@ -390,7 +392,10 @@ class CycleGAN():
             id_B = self.g_AB.predict(imgs_B)
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
+            # minvalue = self.vx.minvalue
+            # maxvalue = self.vx.maxvalue
             fake_B = self.vx.DeNormalizeMM(fake_B)
+            fake_B = self.vx.m_Voxel
             self.raw.append(fake_B)
             # fake_B = np.squeeze(fake_B, axis = 3)
             # fake_B = np.squeeze(fake_B, axis = 0)
@@ -400,6 +405,7 @@ class CycleGAN():
 
             gen_imgs = np.clip(gen_imgs, 0, 1)
             gen_imgs = self.vx.DeNormalizeMM(gen_imgs)
+            gen_imgs = self.vx.m_Voxel
 
             titles = ['Original', 'Translated', 'Reconstructed', 'ID']
             fig, axs = plt.subplots(r, c, figsize=(25,12.5))
