@@ -11,3 +11,5 @@ plan1 = GAN : MRI데이터를 DC GAN알고리즘에 넣어서 새로 이미지�
 plan2 = Cycle GAN : MRI데이터를 Cycle GAN알고리즘에 넣어서 새로 이미지를 만들떄 사용 이 알고리즘으로 Flare image를 Routine 이미지로 점점 바꾸는 작업을 수행함
 
 image : Dicom파일을 불러오거나 vtk를 사용해서 3D Randering을 하는 코드
+
+CycleGAN : EPI이미지와 Routine이미지를 들고와서 EPI이미지를 점점 Routine이미지로 Pix2Pix시켜서 비슷하게 만드는 코드
