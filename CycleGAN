@@ -4,8 +4,8 @@ from keras_contrib.layers.normalization.instancenormalization import InstanceNor
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout, Concatenate
 from keras.layers import BatchNormalization, Activation, ZeroPadding2D, Add
 from keras.layers.advanced_activations import LeakyReLU, ELU
-from keras.layers.convolutional import UpSampling2D, Conv2D, Conv2DTranspose, MaxPooling2D
-from keras.layers.merge import add
+from keras.layers import UpSampling2D, Conv2D, Conv2DTranspose, MaxPooling2D, GlobalAveragePooling2D, Reshape, Dense, AveragePooling2D
+from keras.layers.merge import add, multiply
 from layers import ReflectionPadding2D
 from keras.models import Sequential, Model
 from keras.initializers import RandomNormal
@@ -138,108 +138,95 @@ class CycleGAN():
     
 
     def build_generator_resnet(self):
-    
-        def conv7s1(layer_input, filters, final):
-            y = ReflectionPadding2D(padding =(3,3))(layer_input)
-            y = Conv2D(filters, kernel_size=(7,7), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            if final:
-                y = Activation('tanh')(y)
-            else:
-                y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-                y = Activation('relu')(y)
-            return y
 
-        def downsample(layer_input,filters):
-            y = Conv2D(filters, kernel_size=(3,3), strides=2, padding='same', kernel_initializer = self.weight_init)(layer_input)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-            y = Activation('relu')(y)
-            return y
+        def channel_squeeze(layer_input, fliters):
+            conv_1 = Conv2D(1, (1,1), activation='sigmoid', kernel_initializer='he_normal', use_bias=False, padding='SAME')(layer_input)
+            return multiply([layer_input, conv_1])
 
-        def residual(layer_input, filters):
-            shortcut = layer_input
-            y = ReflectionPadding2D(padding =(1,1))(layer_input)
-            c1 = Conv2D(filters, kernel_size=(3, 3), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(c1)
-            y = Activation('relu')(y)
-            
-            y = ReflectionPadding2D(padding =(1,1))(y)
-            c2 = Conv2DTranspose(filters, kernel_size=(1, 1), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(c2)
+        def feature_aggregation_module(layer_input, filters):
+            identity = layer_input
+            conv1 = conv_block(layer_input, filters)
+            resd1 = add([conv1, layer_input])
 
-            b1 = tf.keras.layers.Concatenate()([c1, c2])
+            conv2 = conv_block(resd1, filters)
+            resd2 = add([conv2, resd1])
 
-            # c1 = Conv2D(filters, kernel_size=(1, 1), strides=1, padding='valid', kernel_initializer = self.weight_init)(y)
-            # sc1 = Conv2D(filters, kernel_size=(1, 1), strides=3, padding='valid', kernel_initializer = self.weight_init)(c1)
-            # mp1 = MaxPooling2D(1,1)(sc1)
+            conv3 = conv_block(resd2, filters)
+            resd3 = add([conv3, resd2])
 
+            conv4 = conv_block(resd3, filters)
 
-            return add([shortcut, b1])
+            aggregated = Concatenate()([conv1, conv2, conv3, conv4])
+            final = Conv2D(filters, (1,1), kernel_initializer='he_normal', use_bias=False, padding='SAME')(aggregated)
+            final = LeakyReLU(alpha=0.3)(final)
 
-        def upsample(layer_input,filters):
-            y = Conv2DTranspose(filters, kernel_size=(3, 3), strides=2, padding='same', kernel_initializer = self.weight_init)(layer_input)
-            y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
-            y = Activation('relu')(y)
-    
-            return y
+            return final + identity
+
+        def conv_block(layer_input, filters):
+            conv_1 = Conv2D(filters, (3,3), kernel_initializer=self.weight_init, use_bias=True, padding='same')(layer_input)
+            ac_1 = LeakyReLU(alpha=0.3)(conv_1)
+            conv_2 = Conv2D(filters, (3,3), kernel_initializer=self.weight_init, use_bias=True, padding='same')(ac_1)
+            SS1 = squeeze_excite_block(conv_2, filters)
+            CS1 = channel_squeeze(conv_2, filters)
+            return add([SS1, CS1])
 
         def squeeze_excite_block(layer_input, filters):
-            m1 = MaxPooling2D(pool_size=(2,2))(layer_input)
-            y = Conv2D(filters, kernel_size=(1, 1), strides=1, padding='valid', kernel_initializer = self.weight_init)(m1)
-            y = self.activ = get_activation_layer(activation)(y)
-            y = self.conv2 = conv1x1(in_channels=mid_cannels,out_channels=channels,bias=True)(y)
-            y = Activation('sigmoid')(y)
-
+            init = layer_input
+            m1 = GlobalAveragePooling2D()(layer_input)
+            squeeze = Reshape((1,1, filters))(m1)
+            squeeze = Dense(filters // 16, activation='relu', kernel_initializer = self.weight_init, use_bias=False)(squeeze)
+            excite = Dense(filters, activation='sigmoid', kernel_initializer = self.weight_init, use_bias=False)(squeeze)
+            return multiply([init, excite])
 
         # Image input
         img = Input(shape=self.img_shape)
 
         y = img
 
-        y = conv7s1(y, self.gen_n_filters, False)
-        y = downsample(y, self.gen_n_filters * 2)
-        y = downsample(y, self.gen_n_filters * 4)
-        b1 = residual(y, self.gen_n_filters * 4)
-        b2 = residual(b1, self.gen_n_filters * 4)
-        b3 = residual(b2, self.gen_n_filters * 4)
-        b4 = residual(b3, self.gen_n_filters * 4)
-        b5 = residual(b4, self.gen_n_filters * 4)
-        b6 = residual(b5, self.gen_n_filters * 4)
-        b7 = residual(b6, self.gen_n_filters * 4)
-        b8 = residual(b7, self.gen_n_filters * 4)
-        b9 = residual(b8, self.gen_n_filters * 4)
-        b10 = tf.keras.layers.Concatenate()([b1, b2, b3, b4, b5, b6, b7, b8, b9])
-        b11 = upsample(b10, self.gen_n_filters * 2)
-        y = upsample(b11, self.gen_n_filters)
-        y = conv7s1(y, 1, True)
-        output = y
+        with tf.name_scope("Generator") as scope:
 
-   
-        return Model(img, output)
+            lr_img = AveragePooling2D((4,4))(y)
+            
+            layer_11 = Conv2D(self.gen_n_filters, (9,9), kernel_initializer=self.weight_init, padding='SAME')(lr_img)
+            encoded = LeakyReLU(alpha=0.3)(layer_11)
 
+            layer21 = feature_aggregation_module(encoded, self.gen_n_filters)
+            layer31 = feature_aggregation_module(layer21, self.gen_n_filters)
+
+            layer41 = layer31 + encoded
+            layer42 = Conv2D(self.gen_n_filters * (4 ** 2), (3,3), kernel_initializer=self.weight_init, padding='SAME')(layer41)
+            layer43 = tf.nn.depth_to_space(layer42, 2)
+            layer43 = LeakyReLU(alpha=0.3)(layer43)
+
+            layer51 = Conv2D(self.gen_n_filters*4, (3,3), kernel_initializer=self.weight_init, padding='SAME')(layer43)
+            layer52 = tf.nn.depth_to_space(layer51, 2)
+            layer53 = LeakyReLU(alpha=0.3)(layer52)
+
+            output_node = Conv2D(1, (9,9), padding='SAME', activation = None)(layer53)
+
+        return Model(y, output_node)
 
 
     def build_discriminator(self):
+        def classifier(input_layer, filters, strides, norm=True):
+            c = Conv2D(filters, kernel_size=3, kernel_initializer='he_normal', strides=strides, padding='same')(input_layer)
 
-        def conv4(layer_input,filters, stride = 2, norm=True):
-            y = Conv2D(filters, kernel_size=(4,4), strides=stride, padding='same', kernel_initializer = self.weight_init)(layer_input)
-            
             if norm:
-                y = InstanceNormalization(axis = -1, center = False, scale = False)(y)
+                c = BatchNormalization()(c)
+            
+            c = LeakyReLU(0.2)(c)
 
-            y = LeakyReLU(0.2)(y)
-           
-            return y
+            return c
+        input = Input(shape=(256, 256,1))
 
-        img = Input(shape=self.img_shape)
+        y = classifier(input, self.filters, strides=2, norm=False) # 256 -> 128
+        y = classifier(y, self.filters*2, strides=2) # 128 -> 64
+        y = classifier(y, self.filters*4, strides=2) # 64 -> 32
+        y = classifier(y, self.filters*8, strides=2) # 32 -> 16
 
-        y = conv4(img, self.disc_n_filters, stride = 2, norm = False)
-        y = conv4(y, self.disc_n_filters*2, stride = 2)
-        y = conv4(y, self.disc_n_filters*4, stride = 2)
-        y = conv4(y, self.disc_n_filters*8, stride = 1)
+        output = Conv2D(1, kernel_size=3, strides=1, padding='same', activation='sigmoid')(y) # 16
 
-        output = Conv2D(1, kernel_size=4, strides=1, padding='same',kernel_initializer = self.weight_init)(y)
-
-        return Model(img, output)
+        return Model(input, output)
 
     def train_discriminators(self, imgs_A, imgs_B, valid, fake):
 
@@ -264,6 +251,9 @@ class CycleGAN():
 
         # Total disciminator loss
         d_loss_total = 0.5 * np.add(dA_loss, dB_loss)
+
+        self.d_A.trainable = False
+        self.d_B.trainable = False
 
         return (
             d_loss_total[0]
@@ -291,20 +281,13 @@ class CycleGAN():
 
         batch_size = 1 #일반적으로 CycleGAN의 batch 사이즈는 1임
         patch = int(self.img_rows/2**4)
-        self.disc_patch = (32, 32, 1)
+        self.disc_patch = (patch, patch, 1)
 
         valid = np.ones((batch_size,) + self.disc_patch)  #진짜 이미지들은 타깃이 1
         fake = np.zeros((batch_size,) + self.disc_patch)  #가짜 이미지들은 타깃이 0
 
-        self.g_AB.summary()
-        self.g_BA.summary()
-        self.d_A.summary()
-        self.d_B.summary()
-
         for epoch in range(self.epoch, epochs):
             for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch(batch_size)):
-                print("AAAAAAAAAAAAAAAAAAAAAAAA")
-                print(imgs_A.shape)
 
                 imgs_A = imgs_A.reshape(20,256,256,1)
                 imgs_B = imgs_B.reshape(20,256,256,1)
@@ -318,6 +301,9 @@ class CycleGAN():
                 #생성자를 사용하여 가짜 이미지 배치 생성
                 fake_B = self.g_AB.predict(imgs_A)
                 fake_A = self.g_BA.predict(imgs_B)
+
+                self.d_A.trainable = True
+                self.d_B.trainable = True
                 
                 #가짜 이미지와 진짜 이미지 배치로 각 판별자를 훈련
                 dA_loss_real = self.d_A.train_on_batch(imgs_A, valid)
@@ -331,6 +317,9 @@ class CycleGAN():
                 elapsed_time = datetime.datetime.now() - start_time
                 
                 d_loss = 0.5 * np.add(dA_loss, dB_loss)
+
+                self.d_A.trainable = False
+                self.d_B.trainable = False
 
                 
                 #생성자는 앞서 컴파일된 결합 모델을 통해 동시에 훈련됨. 6개의 출력은 컴파일 단계에서 정의한 6개의 손실함수에 대응
@@ -406,16 +395,9 @@ class CycleGAN():
             id_B = self.g_AB.predict(imgs_B)
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
-            # minvalue = self.vx.minvalue
-            # maxvalue = self.vx.maxvalue
             fake_B = self.vx.DeNormalizeMM(fake_B)
             fake_B = self.vx.m_Voxel
             self.raw.append(fake_B)
-            # fake_B = np.squeeze(fake_B, axis = 3)
-            # fake_B = np.squeeze(fake_B, axis = 0)
-            # self.raw = np.squeeze(self.raw, axis = 1)
-            # self.raw = np.squeeze(self.raw, axis = 3)
-            # Rescale images 0 - 1
 
             gen_imgs = np.clip(gen_imgs, 0, 1)
             gen_imgs = self.vx.DeNormalizeMM(gen_imgs)
@@ -457,15 +439,15 @@ class CycleGAN():
                 ,  self.disc_n_filters
                 ], f)
 
-        self.plot_model(folder)
+        # self.plot_model(folder)
 
 
-    # def save_model(self, run_folder):
-    #     self.combined.save(os.path.join(run_folder, 'model.h5')  )  
-    #     self.d_A.save(os.path.join(run_folder, 'd_A.h5') )
-    #     self.d_B.save(os.path.join(run_folder, 'd_B.h5') )
-    #     self.g_BA.save(os.path.join(run_folder, 'g_BA.h5')  )
-    #     self.g_AB.save(os.path.join(run_folder, 'g_AB.h5') )
+    def save_model(self, run_folder):
+        self.combined.save(os.path.join(run_folder, 'model.h5')  )  
+        self.d_A.save(os.path.join(run_folder, 'd_A.h5') )
+        self.d_B.save(os.path.join(run_folder, 'd_B.h5') )
+        self.g_BA.save(os.path.join(run_folder, 'g_BA.h5')  )
+        self.g_AB.save(os.path.join(run_folder, 'g_AB.h5') )
 
     def load_weights(self, filepath):
         self.combined.load_weights(filepath)
