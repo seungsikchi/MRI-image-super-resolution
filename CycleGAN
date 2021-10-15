@@ -13,7 +13,9 @@ from tensorflow.keras.optimizers import Adam
 from keras import backend as K
 
 from tensorflow.keras.utils import plot_model
+from glob import glob
 
+from PIL import Image
 import datetime
 import matplotlib.pyplot as plt
 import voxel 
@@ -26,27 +28,48 @@ import random
 
 from collections import deque
 
+DATA_NAME = 'Brain'
+PARAMETER = '0001_mri_512'
+RUN_FOLDER = f'run/'
+RUN_FOLDER += '_'.join([DATA_NAME, PARAMETER])
+RUN_FOLDER += '/'
+print(RUN_FOLDER)
+mode = 'bulid'
+
+if not os.path.exists(RUN_FOLDER):
+    # mkdir 함수는 해당 경로가 존재하지 않는다면(중간 경로는 필수로 있어야함) FileNotFoundError 에러가 발생.
+    os.makedirs(RUN_FOLDER) # makedirs 함수는 에러 발생하지 않고 경로를 새로 만든다.
+    os.mkdir(os.path.join(RUN_FOLDER, 'images'))
+    os.mkdir(os.path.join(RUN_FOLDER, 'raws'))
+    os.mkdir(os.path.join(RUN_FOLDER, 'model'))
+    os.mkdir(os.path.join(RUN_FOLDER, 'weights'))
+
+    mode = 'bulid'
 
 class CycleGAN():
     def __init__(self
+        , Path
+        , RUN_FOLDER
+        , Epochs
         , input_dim
         , learning_rate
         , lambda_validation
         , lambda_reconstr
         , lambda_id
-        , generator_type
         , gen_n_filters
         , disc_n_filters
         , buffer_max_length = 50
         ):
-
+        
+        self.RUN_FOLDER = RUN_FOLDER
+        self.PATH = Path
         self.input_dim = input_dim
         self.learning_rate = learning_rate
         self.buffer_max_length = buffer_max_length
         self.lambda_validation = lambda_validation
         self.lambda_reconstr = lambda_reconstr
         self.lambda_id = lambda_id
-        self.generator_type = generator_type
+
         self.gen_n_filters = gen_n_filters
         self.disc_n_filters = disc_n_filters
 
@@ -55,12 +78,13 @@ class CycleGAN():
         self.img_cols = input_dim[1]
         self.channels = input_dim[2]
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-
+        
+        self.original_image = []
         self.d_losses = []
         self.g_losses = []
         self.raw = []
         self.raw_transpose = []
-        self.epoch = 0
+        self.epoch = Epochs
 
         self.buffer_A = deque(maxlen = self.buffer_max_length)
         self.buffer_B = deque(maxlen = self.buffer_max_length)
@@ -74,6 +98,54 @@ class CycleGAN():
 
         self.compile_models()
 
+    
+    def read_raw(self):
+        path_imgA = self.PATH + '/EPI'
+        path_imgB = self.PATH + '/Routine'
+
+        raw_path_imgA = [ y for x in os.walk(path_imgA) for y in glob(os.path.join(x[0], '*.raw'))]
+        raw_path_imgB = [ y for x in os.walk(path_imgB) for y in glob(os.path.join(x[0], '*.raw'))]
+
+
+        imgs_A = []
+        imgs_B = []
+
+        for i in range(len(raw_path_imgA)):
+            self.vx.ReadFromRaw(raw_path_imgA[i])
+            self.original_image.append(self.vx.m_Voxel)
+            self.vx.NormalizeMM()
+            imgs_A.append(self.vx.m_Voxel)
+            
+        
+        for i in range(len(raw_path_imgB)):
+            self.vx.ReadFromRaw(raw_path_imgB[i])
+            self.original_image.append(self.vx.m_Voxel)
+            self.vx.NormalizeMM()
+            imgs_B.append(self.vx.m_Voxel)
+    
+
+        imgs_A = np.array(imgs_A)
+        imgs_B = np.array(imgs_B)
+        print('image_x :', imgs_A.shape)
+        print('image_y :', imgs_B.shape)
+
+        return imgs_A, imgs_B
+
+    
+    def read_raw_one(self, path):
+        imgs = []
+
+        self.vx.ReadFromRaw(path)
+        self.original_image.append(self.vx.m_Voxel)
+        self.vx.NormalizeMM()
+        imgs.append(self.vx.m_Voxel)
+        imgs = np.array(imgs)
+
+        self.image_processing(imgs,256)
+
+        imgs = imgs[:22]
+
+        return imgs
         
     def compile_models(self):
 
@@ -90,9 +162,21 @@ class CycleGAN():
 
 
         # Build the generators
-        if self.generator_type == 'unet':
-            self.g_AB = self.build_generator_resnet()
-            self.g_BA = self.build_generator_resnet()
+        self.g_AB = self.build_generator_resnet()
+        self.g_BA = self.build_generator_resnet()
+
+        if mode == 'bulid': # mode가 'bulid' 즉, 처음 만들어졌다면 현재 상태 저장
+            print('□□□ 초기 가중치를 저장합니다... □□□')
+            self.g_AB.save_weights(os.path.join(RUN_FOLDER + 'weights/g_AB_weights.h5'))
+            self.g_BA.save_weights(os.path.join(RUN_FOLDER + 'weights/g_BA_weights.h5'))
+            self.d_A.save_weights(os.path.join(RUN_FOLDER + 'weights/d_A_weights.h5'))
+            self.d_B.save_weights(os.path.join(RUN_FOLDER + 'weights/d_B_weights.h5'))
+        else:
+            print('□□□ 저장된 가중치를 불러옵니다... □□□')
+            self.g_AB.load_weights(os.path.join(RUN_FOLDER + 'weights/g_AB_weights.h5'))
+            self.g_BA.load_weights(os.path.join(RUN_FOLDER + 'weights/g_BA_weights.h5'))
+            self.d_A.load_weights(os.path.join(RUN_FOLDER + 'weights/d_A_weights.h5'))
+            self.d_B.load_weights(os.path.join(RUN_FOLDER + 'weights/d_B_weights.h5'))
 
         # self.g_AB.summary()
         # self.g_BA.summary()
@@ -139,7 +223,7 @@ class CycleGAN():
 
     def build_generator_resnet(self):
 
-        def channel_squeeze(layer_input, fliters):
+        def channel_squeeze(layer_input):
             conv_1 = Conv2D(1, (1,1), activation='sigmoid', kernel_initializer='he_normal', use_bias=False, padding='SAME')(layer_input)
             return multiply([layer_input, conv_1])
 
@@ -163,19 +247,19 @@ class CycleGAN():
             return final + identity
 
         def conv_block(layer_input, filters):
-            conv_1 = Conv2D(filters, (3,3), kernel_initializer=self.weight_init, use_bias=True, padding='same')(layer_input)
+            conv_1 = Conv2D(filters, (3,3), kernel_initializer='he_normal', use_bias=True, padding='same')(layer_input)
             ac_1 = LeakyReLU(alpha=0.3)(conv_1)
-            conv_2 = Conv2D(filters, (3,3), kernel_initializer=self.weight_init, use_bias=True, padding='same')(ac_1)
+            conv_2 = Conv2D(filters, (3,3), kernel_initializer='he_normal', use_bias=True, padding='same')(ac_1)
             SS1 = squeeze_excite_block(conv_2, filters)
-            CS1 = channel_squeeze(conv_2, filters)
+            CS1 = channel_squeeze(conv_2)
             return add([SS1, CS1])
 
         def squeeze_excite_block(layer_input, filters):
             init = layer_input
             m1 = GlobalAveragePooling2D()(layer_input)
             squeeze = Reshape((1,1, filters))(m1)
-            squeeze = Dense(filters // 16, activation='relu', kernel_initializer = self.weight_init, use_bias=False)(squeeze)
-            excite = Dense(filters, activation='sigmoid', kernel_initializer = self.weight_init, use_bias=False)(squeeze)
+            squeeze = Dense(filters // 16, activation='relu', kernel_initializer = 'he_normal', use_bias=False)(squeeze)
+            excite = Dense(filters, activation='sigmoid', kernel_initializer = 'he_normal', use_bias=False)(squeeze)
             return multiply([init, excite])
 
         # Image input
@@ -185,7 +269,7 @@ class CycleGAN():
 
         with tf.name_scope("Generator") as scope:
 
-            lr_img = AveragePooling2D((4,4))(y)
+            lr_img = AveragePooling2D((4,4), strides=(4,4), padding = "same")(y)
             
             layer_11 = Conv2D(self.gen_n_filters, (9,9), kernel_initializer=self.weight_init, padding='SAME')(lr_img)
             encoded = LeakyReLU(alpha=0.3)(layer_11)
@@ -219,10 +303,10 @@ class CycleGAN():
             return c
         input = Input(shape=(256, 256,1))
 
-        y = classifier(input, self.filters, strides=2, norm=False) # 256 -> 128
-        y = classifier(y, self.filters*2, strides=2) # 128 -> 64
-        y = classifier(y, self.filters*4, strides=2) # 64 -> 32
-        y = classifier(y, self.filters*8, strides=2) # 32 -> 16
+        y = classifier(input, self.disc_n_filters, strides=2, norm=False) # 256 -> 128
+        y = classifier(y, self.disc_n_filters*2, strides=2) # 128 -> 64
+        y = classifier(y, self.disc_n_filters*4, strides=2) # 64 -> 32
+        y = classifier(y, self.disc_n_filters*8, strides=2) # 32 -> 16
 
         output = Conv2D(1, kernel_size=3, strides=1, padding='same', activation='sigmoid')(y) # 16
 
@@ -273,11 +357,10 @@ class CycleGAN():
                                                 imgs_A, imgs_B])
 
 
-    def train(self, data_loader, run_folder, epochs, batch_size=1, sample_interval=50):
+    def train(self, batch_size=1, sample_interval=50):
+        
 
         start_time = datetime.datetime.now()
-
-        
 
         batch_size = 1 #일반적으로 CycleGAN의 batch 사이즈는 1임
         patch = int(self.img_rows/2**4)
@@ -285,49 +368,51 @@ class CycleGAN():
 
         valid = np.ones((batch_size,) + self.disc_patch)  #진짜 이미지들은 타깃이 1
         fake = np.zeros((batch_size,) + self.disc_patch)  #가짜 이미지들은 타깃이 0
+        
+        for epoch in range(self.epoch):
+            for batch_i, routine_imgs in enumerate(self.train_y):
+                count = 0
+                channel = 20
+                for imgs_channel, imgs_B in enumerate(routine_imgs):
 
-        for epoch in range(self.epoch, epochs):
-            for batch_i, (imgs_A, imgs_B) in enumerate(data_loader.load_batch(batch_size)):
+                    print(imgs_channel)
+                    
+                    imgs_A = self.image_processing(self.train_x[batch_i][imgs_channel+4], 256)
+                    imgs_B = self.image_processing(imgs_B, n_dim = 256)
 
-                imgs_A = imgs_A.reshape(20,256,256,1)
-                imgs_B = imgs_B.reshape(20,256,256,1)
-                
-                imgs_A = imgs_A[batch_i]
-                imgs_B = imgs_B[batch_i]
 
-                imgs_A = np.expand_dims(imgs_A, axis=0)
-                imgs_B = np.expand_dims(imgs_B, axis=0)
+                    #생성자를 사용하여 가짜 이미지 배치 생성
+                    fake_B = self.g_AB.predict(imgs_A)
+                    fake_A = self.g_BA.predict(imgs_B)
 
-                #생성자를 사용하여 가짜 이미지 배치 생성
-                fake_B = self.g_AB.predict(imgs_A)
-                fake_A = self.g_BA.predict(imgs_B)
+                    self.d_A.trainable = True
+                    self.d_B.trainable = True
+                    
+                    #가짜 이미지와 진짜 이미지 배치로 각 판별자를 훈련
+                    dA_loss_real = self.d_A.train_on_batch(imgs_A, valid)
+                    dA_loss_fake = self.d_A.train_on_batch(fake_A, fake)
+                    dA_loss = 0.5 * np.add(dA_loss_real, dA_loss_fake)
+                    
+                    dB_loss_real = self.d_B.train_on_batch(imgs_B, valid)
+                    dB_loss_fake = self.d_B.train_on_batch(fake_B, fake)
+                    dB_loss = 0.5 * np.add(dB_loss_real, dB_loss_fake)
 
-                self.d_A.trainable = True
-                self.d_B.trainable = True
-                
-                #가짜 이미지와 진짜 이미지 배치로 각 판별자를 훈련
-                dA_loss_real = self.d_A.train_on_batch(imgs_A, valid)
-                dA_loss_fake = self.d_A.train_on_batch(fake_A, fake)
-                dA_loss = 0.5 * np.add(dA_loss_real, dA_loss_fake)
-                
-                dB_loss_real = self.d_B.train_on_batch(imgs_B, valid)
-                dB_loss_fake = self.d_B.train_on_batch(fake_B, fake)
-                dB_loss = 0.5 * np.add(dB_loss_real, dB_loss_fake)
+                    elapsed_time = datetime.datetime.now() - start_time
+                    
+                    d_loss = 0.5 * np.add(dA_loss, dB_loss)
 
-                elapsed_time = datetime.datetime.now() - start_time
-                
-                d_loss = 0.5 * np.add(dA_loss, dB_loss)
+                    self.d_A.trainable = False
+                    self.d_B.trainable = False
 
-                self.d_A.trainable = False
-                self.d_B.trainable = False
+                    #생성자는 앞서 컴파일된 결합 모델을 통해 동시에 훈련됨. 6개의 출력은 컴파일 단계에서 정의한 6개의 손실함수에 대응
+                    g_loss = self.combined.train_on_batch([imgs_A, imgs_B], [valid, valid, imgs_A, imgs_B, imgs_A, imgs_B])
 
-                
-                #생성자는 앞서 컴파일된 결합 모델을 통해 동시에 훈련됨. 6개의 출력은 컴파일 단계에서 정의한 6개의 손실함수에 대응
-                g_loss = self.combined.train_on_batch([imgs_A, imgs_B], [valid, valid, imgs_A, imgs_B, imgs_A, imgs_B])
+                    count += 1
 
-                print("[Epoch %d/%d] [Batch %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s " \
-                        % ( self.epoch, epochs,
-                            batch_i, data_loader.n_batches,
+                    print("[Epoch %d/%d] [Batch %d/%d] [Count %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s " \
+                        % ( self.epoch, epoch+1,
+                            20, batch_i,
+                            channel,  count,
                             d_loss[0], 100*d_loss[1],
                             g_loss[0],
                             np.sum(g_loss[1:3]),
@@ -338,10 +423,10 @@ class CycleGAN():
 
                 # If at save interval => save generated image samples
                 if batch_i % sample_interval == 0:
-                    self.sample_images(data_loader, batch_i, run_folder)
-                    self.combined.save_weights(os.path.join(run_folder, 'weights/weights-%d.h5' % (self.epoch)))
-                    self.combined.save_weights(os.path.join(run_folder, 'weights/weights.h5'))
-                    # self.save_model(run_folder)
+                    self.sample_images(batch_i, imgs_channel)
+                    self.combined.save_weights(os.path.join(self.RUN_FOLDER, 'weights/weights-%d.h5' % (self.epoch)))
+                    self.combined.save_weights(os.path.join(self.RUN_FOLDER, 'weights/weights.h5'))
+                    self.save_model(self.RUN_FOLDER)
 
                 
             self.epoch += 1
@@ -352,36 +437,26 @@ class CycleGAN():
                 self.raw_transpose = np.squeeze(self.raw_transpose, axis = 3)
                 # plt.imshow(self.raw_transpose[10], cmap= 'gray')
                 # plt.show()
-                print(self.raw_transpose.shape)
-                print(self.raw_transpose)
                 self.vx.NumpyArraytoVoxel(self.raw_transpose)
+                self.vx.DeNormalizeMM(self.original_image)
                 self.vx.WriteToRaw("./run/Brain/0001_mri_512/newraw/Epochs%d.raw"%self.epoch)
                 del self.raw[:]
                 print(self.raw)
 
 
-    def sample_images(self, data_loader, batch_i, run_folder):
+    def sample_images(self, batch_i, imgs_channel):
         
         r, c = 2, 4
 
         for p in range(2):
 
-            if p == 1:
-                imgs_A = data_loader.load_data(batch_size=1, is_testing=True)
-                imgs_B = data_loader.load_data(batch_size=1, is_testing=True)
-            else:
-                imgs_A = data_loader.load_img('./data/EPI/010_EPI_FLA.raw')
-                imgs_B = data_loader.load_img('./data/Routine/001_Routine_FLA.raw')
+            imgs_A = self.test_x
+            imgs_B = self.test_y
 
+            print(imgs_A[p].shape)
 
-            imgs_A = imgs_A.reshape(20,256,256,1)
-            imgs_B = imgs_B.reshape(20,256,256,1)
-                
-            imgs_A = imgs_A[batch_i]
-            imgs_B = imgs_B[batch_i]
-
-            imgs_A = np.expand_dims(imgs_A, axis=0)
-            imgs_B = np.expand_dims(imgs_B, axis=0)
+            imgs_A = self.image_processing(imgs_A[p][imgs_channel], 256) 
+            imgs_B = self.image_processing(imgs_B[p][imgs_channel], 256)              
 
             # Translate images to the other domain
             fake_B = self.g_AB.predict(imgs_A)
@@ -395,12 +470,10 @@ class CycleGAN():
             id_B = self.g_AB.predict(imgs_B)
 
             gen_imgs = np.concatenate([imgs_A, fake_B, reconstr_A, id_A, imgs_B, fake_A, reconstr_B, id_B])
-            fake_B = self.vx.DeNormalizeMM(fake_B)
-            fake_B = self.vx.m_Voxel
-            self.raw.append(fake_B)
+            self.raw.append(reconstr_A)
 
             gen_imgs = np.clip(gen_imgs, 0, 1)
-            gen_imgs = self.vx.DeNormalizeMM(gen_imgs)
+            self.vx.NumpyArraytoVoxel(gen_imgs)
             gen_imgs = self.vx.m_Voxel
 
             titles = ['Original', 'Translated', 'Reconstructed', 'ID']
@@ -412,16 +485,16 @@ class CycleGAN():
                     axs[i, j].set_title(titles[j])
                     axs[i,j].axis('off')
                     cnt += 1
-            fig.savefig(os.path.join(run_folder ,"images/%d_%d_%d.png" % (p, self.epoch, batch_i)))
+            fig.savefig(os.path.join(self.RUN_FOLDER ,"images/%d_%d_%d.png" % (p, self.epoch, batch_i)))
             plt.close()
 
 
-    def plot_model(self, run_folder):
-        plot_model(self.combined, to_file=os.path.join(run_folder ,'viz/combined.png'), show_shapes = True, show_layer_names = True)
-        plot_model(self.d_A, to_file=os.path.join(run_folder ,'viz/d_A.png'), show_shapes = True, show_layer_names = True)
-        plot_model(self.d_B, to_file=os.path.join(run_folder ,'viz/d_B.png'), show_shapes = True, show_layer_names = True)
-        plot_model(self.g_BA, to_file=os.path.join(run_folder ,'viz/g_BA.png'), show_shapes = True, show_layer_names = True)
-        plot_model(self.g_AB, to_file=os.path.join(run_folder ,'viz/g_AB.png'), show_shapes = True, show_layer_names = True)
+    def plot_model(self):
+        plot_model(self.combined, to_file=os.path.join(self.RUN_FOLDER ,'viz/combined.png'), show_shapes = True, show_layer_names = True)
+        plot_model(self.d_A, to_file=os.path.join(self.RUN_FOLDER ,'viz/d_A.png'), show_shapes = True, show_layer_names = True)
+        plot_model(self.d_B, to_file=os.path.join(self.RUN_FOLDER ,'viz/d_B.png'), show_shapes = True, show_layer_names = True)
+        plot_model(self.g_BA, to_file=os.path.join(self.RUN_FOLDER ,'viz/g_BA.png'), show_shapes = True, show_layer_names = True)
+        plot_model(self.g_AB, to_file=os.path.join(self.RUN_FOLDER ,'viz/g_AB.png'), show_shapes = True, show_layer_names = True)
 
 
     def save(self, folder):
@@ -434,7 +507,6 @@ class CycleGAN():
                 ,  self.lambda_validation
                 ,  self.lambda_reconstr
                 ,  self.lambda_id
-                ,  self.generator_type
                 ,  self.gen_n_filters
                 ,  self.disc_n_filters
                 ], f)
@@ -443,11 +515,51 @@ class CycleGAN():
 
 
     def save_model(self, run_folder):
-        self.combined.save(os.path.join(run_folder, 'model.h5')  )  
-        self.d_A.save(os.path.join(run_folder, 'd_A.h5') )
-        self.d_B.save(os.path.join(run_folder, 'd_B.h5') )
-        self.g_BA.save(os.path.join(run_folder, 'g_BA.h5')  )
-        self.g_AB.save(os.path.join(run_folder, 'g_AB.h5') )
+        self.combined.save(os.path.join(run_folder, 'weights/model.h5')  )  
+        self.d_A.save(os.path.join(run_folder, 'weights/d_A.h5') )
+        self.d_B.save(os.path.join(run_folder, 'weights/d_B.h5') )
+        self.g_BA.save(os.path.join(run_folder, 'weights/g_BA.h5')  )
+        self.g_AB.save(os.path.join(run_folder, 'weights/g_AB.h5') )
 
     def load_weights(self, filepath):
         self.combined.load_weights(filepath)
+        self.g_AB.load_weights(os.path.join(RUN_FOLDER + 'weights/g_AB_weights.h5'))
+        self.g_BA.load_weights(os.path.join(RUN_FOLDER + 'weights/g_BA_weights.h5'))
+        self.d_A.load_weights(os.path.join(RUN_FOLDER + 'weights/d_A_weights.h5'))
+        self.d_B.load_weights(os.path.join(RUN_FOLDER + 'weights/d_B_weights.h5'))
+    
+    def image_processing(self, img, n_dim):
+        imgs = Image.fromarray(img.astype(np.float32))
+        imgs = np.array(imgs.resize((n_dim, n_dim)))
+
+        imgs = np.expand_dims(imgs, axis=0)
+        imgs = np.expand_dims(imgs, axis=3)
+        return imgs
+
+
+    def train_start(self): # 128, epoch, batch_size
+        data_x, data_y = self.read_raw()
+
+        self.train_x, self.test_x = data_x[:22], data_x[22:]
+        self.train_y, self.test_y = data_y[:22], data_y[22:]
+
+        self.train()
+
+Path = './data'
+
+cyclegan = CycleGAN(Path
+    , RUN_FOLDER
+    , Epochs = 900
+    , input_dim = (256,256,1)
+    , learning_rate = 0.0002
+    , buffer_max_length = 50
+    , lambda_validation = 1
+    , lambda_reconstr = 10
+    , lambda_id = 2
+    , gen_n_filters = 32
+    , disc_n_filters = 32
+    )
+
+
+
+cyclegan.train_start()
