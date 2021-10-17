@@ -224,7 +224,7 @@ class CycleGAN():
     def build_generator_resnet(self):
 
         def channel_squeeze(layer_input):
-            conv_1 = Conv2D(1, (1,1), activation='sigmoid', kernel_initializer='he_normal', use_bias=False, padding='SAME')(layer_input)
+            conv_1 = Conv2D(1, (1,1), activation='sigmoid', use_bias=False, padding='SAME')(layer_input)
             return multiply([layer_input, conv_1])
 
         def feature_aggregation_module(layer_input, filters):
@@ -259,7 +259,7 @@ class CycleGAN():
             m1 = GlobalAveragePooling2D()(layer_input)
             squeeze = Reshape((1,1, filters))(m1)
             squeeze = Dense(filters // 16, activation='relu', kernel_initializer = 'he_normal', use_bias=False)(squeeze)
-            excite = Dense(filters, activation='sigmoid', kernel_initializer = 'he_normal', use_bias=False)(squeeze)
+            excite = Dense(filters, activation='sigmoid', use_bias=False)(squeeze)
             return multiply([init, excite])
 
         # Image input
@@ -271,18 +271,18 @@ class CycleGAN():
 
             lr_img = AveragePooling2D((4,4), strides=(4,4), padding = "same")(y)
             
-            layer_11 = Conv2D(self.gen_n_filters, (9,9), kernel_initializer=self.weight_init, padding='SAME')(lr_img)
+            layer_11 = Conv2D(self.gen_n_filters, (9,9), kernel_initializer= 'he_normal', padding='SAME')(lr_img)
             encoded = LeakyReLU(alpha=0.3)(layer_11)
 
             layer21 = feature_aggregation_module(encoded, self.gen_n_filters)
             layer31 = feature_aggregation_module(layer21, self.gen_n_filters)
 
             layer41 = layer31 + encoded
-            layer42 = Conv2D(self.gen_n_filters * (4 ** 2), (3,3), kernel_initializer=self.weight_init, padding='SAME')(layer41)
+            layer42 = Conv2D(self.gen_n_filters * (4 ** 2), (3,3), kernel_initializer= 'he_normal', padding='SAME')(layer41)
             layer43 = tf.nn.depth_to_space(layer42, 2)
             layer43 = LeakyReLU(alpha=0.3)(layer43)
 
-            layer51 = Conv2D(self.gen_n_filters*4, (3,3), kernel_initializer=self.weight_init, padding='SAME')(layer43)
+            layer51 = Conv2D(self.gen_n_filters*4, (3,3), kernel_initializer= 'he_normal', padding='SAME')(layer43)
             layer52 = tf.nn.depth_to_space(layer51, 2)
             layer53 = LeakyReLU(alpha=0.3)(layer52)
 
@@ -554,13 +554,13 @@ Path = './data'
 
 cyclegan = CycleGAN(Path
     , RUN_FOLDER
-    , Epochs = 900
+    , Epochs = 300
     , input_dim = (256,256,1)
     , learning_rate = 0.0002
     , buffer_max_length = 50
     , lambda_validation = 1
-    , lambda_reconstr = 10
-    , lambda_id = 2
+    , lambda_reconstr = 15
+    , lambda_id = 3
     , gen_n_filters = 32
     , disc_n_filters = 32
     )
