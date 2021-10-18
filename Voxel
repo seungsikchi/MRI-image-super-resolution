@@ -1,7 +1,17 @@
 import numpy as np
 import sys
- 
-class PyVoxel:
+
+# b는 바이너리의 약자 
+class PyVoxel: # Voxel은 Volumn과 pixel의 합성어
+    # Raw 이미지 파일은 이미지 파일 포맷 중 하나로 디지털 카메라나 이미지 스캐너의 이미지 센서로부터 최소한으로 처리한 데이터를 포함하고있다.
+    # 전혀 가공되지 않은 상태이며 촬상매체에 감지된 빛의 세기에 대한 정보만을 담고있다.
+    # raw는 JPEG보다 수많은 이점을 가지고 있다.
+    # 더 높은 화질, 무손실 압축, 섬세한 제어, 색 공간은 사용자가 원하는 대로 설정할 수 있다.
+
+    # BIN파일은 다른 회사의 디스크 이미지 개발 및 편집 응용 프로그램의 다양한 만든 파일이다. 
+    # 이 파일의 내용은 바이너리 형태이다. 
+    # 텍스트 파일이아닌 컴퓨터 파일이다. 
+    # 바이너리파일은 '한 줄에 해당하는 데이터를 읽어라'와 같은 명령을 사용하지 않고 '10 바이트를 읽어라'로 사용
     def __init__(self):
         self.m_Org = -1  # 지금 신경안써도된다. 다 255로 되어있을 것이다. , 순서가 뒤바꼈을 경우를 대비한것이다.
         self.m_nX = 0  # 픽셀 개수
@@ -34,6 +44,7 @@ class PyVoxel:
         self.m_Voxel = []
 
     def ReadFromRaw(self, filename):  # 이미지 16비트
+        # print('success ReadFromBin')
         with open(filename, 'rb') as f:  # rb = byte 형식으로 파일 읽기 # f.close를 매번하기 귀찮기 때문에 with를 사용, f는 instance
             try:
                 Header = np.fromfile(f, dtype='int32', count=1)  # dtype이 int32인 data만 file로부터 받아오는?
@@ -61,7 +72,7 @@ class PyVoxel:
 
                 Data = np.fromfile(f, dtype='int16', count=self.m_nX*self.m_nY*self.m_nZ)
                 self.m_Voxel = np.reshape(Data, (self.m_nZ, self.m_nY, self.m_nX))
-                # print('self.m_Voxel =', self.m_Voxel)
+                self.m_Voxel = np.clip(self.m_Voxel, 0, 3500)
 
             except IOError:
                 print('Could not read file ' + filename)
@@ -95,7 +106,6 @@ class PyVoxel:
 
                     Data = np.fromfile(f, dtype='uint8', count=self.m_nX*self.m_nY*self.m_nZ*self.rgb)
                     self.m_Voxel = np.reshape(Data, (self.m_nZ, self.m_nY, self.m_nX, self.rgb))
-                    print(self.m_Voxel)   
 
                 except IOError:
                     print('Could not read file' + filename)
@@ -147,6 +157,17 @@ class PyVoxel:
         
         self.m_Voxel = data.astype(np.int16, copy=-False)  # .append로하면 겉에는 list가 된다.
 
+    def NumpyArraytoVoxel_float(self, data):
+        self.initialize()
+
+        Dim = data.shape  # shape = (,)
+        self.m_nX = Dim[2]  # shape는 (가로, 세로)가 아닌 (세로, 가로)의 순서이기 때문
+        self.m_nY = Dim[1]
+        self.m_nZ = Dim[0] 
+        
+        self.m_Voxel = data.astype(np.float16, copy=-False)  # .append로하면 겉에는 list가 된다.
+        
+
     def Create_Mask_Space(self, data):  # 넘파이 배열을 받으면
         self.initialize()
 
@@ -172,7 +193,7 @@ class PyVoxel:
         self.m_Voxel = self.m_Voxel.astype(np.float32, copy=False)
         maxvalue = np.max(self.m_Voxel)  # m_Voxel의 가장 큰 값을 뽑아낸다.
         print(maxvalue)
-        self.m_Voxel = self.m_Voxel/maxvalue  # 0.~으로 정규화 된다.
+        self.m_Voxel = self.m_Voxel/maxvalue  # 0.~으로 정규화 된다. 
 
     def NormalizeMM(self):
         self.m_Voxel = self.m_Voxel.astype(np.float32, copy=False)
@@ -182,16 +203,15 @@ class PyVoxel:
         diff = maxvalue - minvalue
         self.m_Voxel = (self.m_Voxel - minvalue)/diff
 
-    def DeNormalizeMM(self, gen_imgs):
-        self.m_Voxel = gen_imgs
-        self.m_Voxel = self.m_Voxel.astype(np.float32, copy=False)
-        maxvalue = np.max(self.m_Voxel)  # m_Voxel의 가장 큰 값을 뽑아낸다.
-        minvalue = np.min(self.m_Voxel)  # m_Voxel의 가장 작은 값을 뽑아낸다.
+    def DeNormalizeMM(self, original):
+        original = np.array(original)
 
-        diff = maxvalue + minvalue
-        self.m_Voxel = (self.m_Voxel + minvalue)*diff
+        print(type(original))
+        maxvalue = np.max(original)
+        minvalue = np.min(original)
 
-        return self.m_Voxel
+        diff = maxvalue - minvalue
+        self.m_Voxel = (self.m_Voxel * diff) + minvalue
 
     def AdjustPixelRangeNormalize(self, Upper):  # version 1?
         self.m_Voxel = self.m_Voxel.astype(np.float32, copy=False)
