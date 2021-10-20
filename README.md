@@ -1,6 +1,6 @@
 # MRI-image-super-resolution
 
-labeling tool : MRI데이터가 3차원 데이터기 때문에 라벨링 툴을 따류 만들었다. 
+labeling tool : 영상에 대해서 친숙해지기 위해 MRI데이터를 3차원 데이터기 때문에 라벨링 툴을 따류 만들었다. 
 
 loader : MRI데이터를 불러오는 코드 GAN과 Cycle GAN에 import시켜서 사용한다.
 
