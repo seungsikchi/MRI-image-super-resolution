@@ -407,7 +407,7 @@ class CycleGAN():
 
                     count += 1
 
-                    print("[Epoch %d/%d] [Batch %d/%d] [Count %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s " \
+                    print("[Epoch %d/%d] [Batch %d/%d] [Count %d/%d] [D loss: %f, acc: %3d%%] [G loss: %05f, adv: %05f, recon: %05f, id: %05f] time: %s "
                         % ( self.epoch, epoch+1,
                             21, batch_i,
                             channel,  count,
